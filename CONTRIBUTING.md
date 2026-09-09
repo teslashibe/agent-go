@@ -2,6 +2,8 @@
 
 Keep changes focused and preserve identity checks, authorization, confirmation, durable recovery evidence, and data-loss protection.
 
+The [public roadmap](https://github.com/users/teslashibe/projects/1) tracks sprint epics, feature issues, dependencies and later discovery work. Start with an issue and discuss taking it before implementation to avoid duplicate work. Target dates are plans; an issue is complete only when its acceptance criteria and relevant verification pass.
+
 1. Open an issue for behavior or architecture changes.
 2. Work on a branch and include tests for changed behavior.
 3. Run the checks below on the development Mac with public module resolution and no enclosing Go workspace. For the reference deployment, all Go commands run remotely on the Mac mini; follow [the isolated verification sequence](docs/mini-development.md). Never run tests against the live service state.

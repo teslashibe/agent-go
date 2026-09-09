@@ -2,7 +2,7 @@
 
 **An iMessage agent that runs on your Mac.** Go, SQLite, Codex, and optional native Apple Notes tools.
 
-[Documentation](https://teslashibe.github.io/agent-go/) · [What works](docs/verified.md) · [Install](docs/install-macos.md) · [Contribute](CONTRIBUTING.md)
+[Documentation](https://teslashibe.github.io/agent-go/) · [What works](docs/verified.md) · [Install](docs/install-macos.md) · [Roadmap](https://github.com/users/teslashibe/projects/1) · [Contribute](CONTRIBUTING.md)
 
 ## What works
 
