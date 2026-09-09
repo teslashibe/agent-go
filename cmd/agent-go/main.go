@@ -520,7 +520,7 @@ func connect(parent context.Context, cfg config.Config, source store.Source, db 
 			if chatCfg.OwnerNotes {
 				enable = worker.EnableOwnerNotes
 			}
-			if err := enable(ctx, notes.Client{NativeExecutable: chatCfg.NotesHelper}); err != nil {
+			if err := enable(ctx, notes.Client{NativeExecutable: chatCfg.NotesHelper, Timeout: 30 * time.Second}); err != nil {
 				return err
 			}
 		}
