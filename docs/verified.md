@@ -26,6 +26,8 @@ Tapbacks require English Messages labels and a usable GUI. Attachments, unsuppor
 ## Passed in the reference runtime
 
 - **Signed deployment:** the installed application passed the nine-stage Mini verifier and a guarded deployment with 70 seconds of stable health observation. The application and native helpers retained their established Keychain signing identities.
+- **Owner-requested upgrade:** an authorized coding DM queued the verified revision, the independent worker waited for the requesting job to finish, and the guarded installer completed. Installed bytes matched the verified artifact, the existing signer and configuration were preserved, and the 70-second health check passed with no unresolved work.
+- **Public build:** the public source was cloned anonymously on the Mini and its pinned modules resolved from an empty cache without maintainer credentials. All nine deterministic verification stages passed. Hosted CI still needs a successful run.
 - **State preservation:** deployment and reviewed recovery retained existing sessions and durable evidence. A database-copy comparison checked existing values across 21 tables for the tested migration path.
 - **Keep awake:** the per-user helper holds idle display and system sleep assertions. It cannot unlock a manually locked screen or complete login after logout, reboot, or FileVault preboot.
 - **VPN maintenance:** ordinary SSH over Tailscale connects to the Mini using the existing login key and verified host key. A test from a different physical network remains outstanding.
@@ -46,8 +48,7 @@ The deterministic Mini pipeline separately covers formatting, normal and race te
 | --- | --- |
 | Google integration | Per-chat account grants and read-only tools are implemented. This summary does not claim a complete live OAuth and provider acceptance run. |
 | Document attachments | Bounded extraction and authorization checks are implemented. This summary does not claim live acceptance across every supported document format. |
-| Deferred self-upgrade | A live rehearsal found a canonical owner-DM identity mismatch. The correction passed all nine deterministic Mini verification stages; a successful live handoff remains. |
 | Remote availability | Test from a different physical network and establish behavior after sleep, lock, logout, reboot, and preboot recovery. |
 | Fresh installation | Source and pinned dependencies are public. A successful anonymous build still does not verify first-run authentication, macOS permissions, or every native integration on a new Mac. |
 
-Operator-driven signed deployment has worked. A fully verified, owner-requested self-upgrade through the complete PR-to-install pipeline is **not yet established**. Failed and incomplete verification runs remain failures; they are not counted as passes.
+Operator-driven deployment and one complete owner-requested PR-to-install handoff have now worked on the reference Mini. The public snapshot has the same runtime and installer code as that deployed revision; its additional changes sanitize fixtures and update community documentation. Failed and incomplete earlier runs remain failures; they are not counted as passes.

@@ -37,7 +37,7 @@ Use a dedicated macOS account with Messages signed in, an active graphical sessi
 
 ## Current status
 
-This is experimental software with a verified reference Mac mini installation. Private/group messaging, native Notes workflows, and standard tapbacks have passed live fixtures. The source and pinned Go dependencies are public. A complete owner self-upgrade handoff still needs live verification. Building the code does not grant native app permissions or authenticate the model.
+This is experimental software with a verified reference Mac mini installation. Private/group messaging, native Notes workflows, and standard tapbacks have passed live fixtures. The source and pinned Go dependencies are public. An owner-requested upgrade through the verified PR-to-install pipeline has also completed. Building the code does not grant native app permissions or authenticate the model.
 
 The public repository starts from a reviewed source snapshot. Pre-publication operational history and evidence are retained privately. Contributors use their own accounts, configuration, signing identities, and macOS permissions.
 
