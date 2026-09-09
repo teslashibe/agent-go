@@ -60,4 +60,4 @@ backups.
 
 ## Deferred self-upgrades
 
-The owner coding workflow can prepare repository changes and pull requests. The deferred self-upgrade handoff remains experimental: a canonical DM identity mismatch was found during live verification, and its correction has passed the full deterministic Mini verification. A successful live handoff still needs to be observed. Use the verified operator-driven update path until that work is complete. See [Mini verification](mini-development.md) for the required evidence and recovery rules.
+The owner coding workflow can prepare repository changes and pull requests. A complete owner-requested handoff has passed on the reference Mini: the independent worker waited for the requesting job to finish, installed the exact verified artifact through the guarded installer, and passed the health check with the original signer and configuration. Queueing an upgrade is still only a pending request; inspect its completed result before claiming deployment. See [Mini verification](mini-development.md) for the required evidence and recovery rules.

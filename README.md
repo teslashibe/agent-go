@@ -14,7 +14,7 @@ Authenticated model fixtures with fake services also cover Notes tool use and re
 
 Follow [Install on macOS](docs/install-macos.md). You need Messages signed in, an active GUI session, authenticated Codex, a compatible `imsg` executable, Go, and your own signing identity and macOS permissions.
 
-**Experimental:** the owner self-upgrade handoff still needs live verification. Native integrations depend on your Mac’s logged-in session and permissions. The default execution policy is `yolo`; use a dedicated account and trusted participants. Chat allowlists are not an OS sandbox.
+**Experimental:** native integrations depend on your Mac’s logged-in session and permissions. The default execution policy is `yolo`; use a dedicated account and trusted participants. Chat allowlists are not an OS sandbox.
 
 ## Documentation
 

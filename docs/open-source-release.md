@@ -48,8 +48,9 @@ a clean source scan does not establish provider revocation.
 Run the deterministic [Mini verification sequence](mini-development.md) against
 one exact revision. Keep normal/race tests, vet, builds and script checks
 separate from authenticated model fixtures and real Apple app tests. Record
-failures and skipped opt-in tests. Anonymous module resolution and CI must pass
-before claiming a reproducible public build.
+failures and skipped opt-in tests. Anonymous public checkout and module resolution from an empty cache passed on
+the Mini for the initial public revision, together with all nine deterministic
+verification stages. Hosted CI still needs a successful run.
 
 [Verified capabilities](verified.md) lists the live reference results and
 remaining acceptance work. Publication is not a stable-release claim. Native
