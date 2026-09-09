@@ -245,3 +245,5 @@ Screen Sharing available through the private network for that recovery. To undo
 the awake setup, unload/remove `ai.teslashibe.agent-awake.plist` and restore the
 saved screen-saver idle setting (delete the current-host `idleTime` preference
 when the saved value is null).
+
+Authenticated model fixtures can cause the CLI to persist temporary workspace trust entries outside the supplied authentication directory. Compare all reviewed configuration sources before and after a fixture. Archive only entries proven to have been created by that fixture; never replace a user configuration or accept a new source merely to pass validation. An exact `unexpected configuration source` rejection occurs before the pinned adapter starts app-server. After restoring the reviewed environment, the existing operator binding-recovery command can requeue that exact failure only if its durable checks prove no tool operation or reply was dispatched. The original request, session, acknowledgement and audit evidence are preserved.

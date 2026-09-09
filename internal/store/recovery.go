@@ -28,9 +28,11 @@ func (s *Store) RetryBindingRejectedAttempt(ctx context.Context, source Source, 
 	return s.recoverAttempt(ctx, source, jobID, reason, nil, true)
 }
 
-// bindingRejection is emitted by pinned codex v0.7.0 bindInteractiveMCP before
-// runInteractive starts app-server. Do not broaden this to arbitrary config errors.
+// These exact errors are emitted by pinned codex v0.7.3 before app-server
+// starts. Do not accept arbitrary configuration errors or prefix matches.
+// The operator must restore the reviewed source before requesting a retry.
 const bindingRejection = "codex: interactive configuration blocked: unreviewed or duplicate per-run MCP binding"
+const unexpectedSourceRejection = "codex: interactive configuration blocked: unexpected configuration source"
 
 // interruptedTurn is emitted by pinned teslashibe/codex v0.7.0 when a turn notification
 // arrives with status other than completed. The real status is not preserved.
@@ -73,7 +75,7 @@ func (s *Store) recoverAttempt(ctx context.Context, source Source, jobID int64, 
 		return ErrUncertain
 	}
 	if prelaunch {
-		if failure != bindingRejection {
+		if failure != bindingRejection && failure != unexpectedSourceRejection {
 			return ErrUncertain
 		}
 		var effects int
@@ -131,7 +133,7 @@ func (s *Store) recoverAttempt(ctx context.Context, source Source, jobID int64, 
 	}
 	if prelaunch {
 		state = "queued"
-		audit = "PRELAUNCH BINDING REJECTION RETRY; pinned codex v0.7.0 rejected before app-server launch; original error: " + failure + "; operator review: " + reason
+		audit = "PRELAUNCH CONFIGURATION REJECTION RETRY; pinned codex v0.7.3 rejected before app-server launch; original error: " + failure + "; operator review: " + reason
 	}
 	if _, err = tx.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS recovery_audit (id INTEGER PRIMARY KEY, job_id INTEGER NOT NULL REFERENCES jobs(id), created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, detail TEXT NOT NULL)`); err != nil {
 		return err
