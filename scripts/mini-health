@@ -1,0 +1,68 @@
+#!/usr/bin/env python3
+"""Print a read-only service and aggregate work snapshot; never perform recovery."""
+
+import argparse
+import importlib.util
+import json
+from pathlib import Path
+import sqlite3
+import sys
+
+sys.dont_write_bytecode = True
+
+
+def installer():
+    path = Path(__file__).with_name("deploy-mini-remote.py")
+    spec = importlib.util.spec_from_file_location("mini_installer", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def snapshot(deploy, database):
+    result = {"service": {"state": "unknown", "pid": None}, "errors": []}
+    try:
+        info = deploy.service_info()
+        # Never forward arbitrary launchctl text, last-exit reasons or paths.
+        state = info.get("state")
+        if state in ("running", "waiting", "exited", "stopped"):
+            result["service"]["state"] = state
+        pid = info.get("pid", "")
+        if isinstance(pid, str) and pid.isascii() and pid.isdigit() and len(pid) <= 10:
+            result["service"]["pid"] = int(pid)
+        if result["service"]["state"] == "unknown":
+            result["errors"].append("service_unavailable")
+    except Exception:
+        result["errors"].append("service_unavailable")
+    try:
+        # mode=ro rejects missing databases and recovery requiring writes. Do not
+        # use immutable: the running service's WAL must remain visible.
+        db = sqlite3.connect(Path(database).absolute().as_uri() + "?mode=ro", uri=True)
+        try:
+            db.execute("PRAGMA query_only=ON")
+            result["idle_counts"] = deploy.idle(db)
+            result["health_counts"] = deploy.health_state(db)
+            result["idle"] = not any(result["idle_counts"].values())
+        finally:
+            db.close()
+    except Exception:
+        result.pop("idle_counts", None)
+        result.pop("health_counts", None)
+        result["errors"].append("database_unavailable")
+    return result
+
+
+def main():
+    deploy = installer()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--database", type=Path, default=Path(deploy.DB),
+                        help="state database (defaults to the installer's state.db)")
+    args = parser.parse_args()
+    result = snapshot(deploy, args.database)
+    print(json.dumps(result, sort_keys=True))
+    return int(bool(result["errors"]) or result["service"]["state"] != "running"
+               or any(result.get("health_counts", {}).values()))
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

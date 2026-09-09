@@ -247,3 +247,20 @@ saved screen-saver idle setting (delete the current-host `idleTime` preference
 when the saved value is null).
 
 Authenticated model fixtures can cause the CLI to persist temporary workspace trust entries outside the supplied authentication directory. Compare all reviewed configuration sources before and after a fixture. Archive only entries proven to have been created by that fixture; never replace a user configuration or accept a new source merely to pass validation. An exact `unexpected configuration source` rejection occurs before the pinned adapter starts app-server. After restoring the reviewed environment, the existing operator binding-recovery command can requeue that exact failure only if its durable checks prove no tool operation or reply was dispatched. The original request, session, acknowledgement and audit evidence are preserved.
+
+## Read-only health snapshot
+
+Run `scripts/mini-health` on the installed Mini for JSON containing normalized
+service state/PID, installer idle counts and unresolved health counts. Use
+`--database /path/to/state.db` when the installation uses a different state path;
+the default is the installer's `~/.local/share/agent-go/state.db`. Configuration
+is not read or printed. Output excludes message/source identities, record bodies,
+raw launchctl output and exception details.
+
+The command uses SQLite read-only mode and query-only queries with WAL visibility.
+It never creates a missing database, attempts recovery, clears work or restarts
+anything. Unavailable service/database data produces fixed error codes. Exit 0
+means a running service with no unresolved health counts; exit 1 means unavailable
+or unhealthy. Ordinary queued/running work may make `idle` false while exit 0 is
+still appropriate. Service, idle and health readings are separate snapshots, not
+an atomic deployment approval or end-to-end native/model verification.
