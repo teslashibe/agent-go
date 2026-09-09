@@ -70,6 +70,10 @@ For the optional `interactive_config` path, the reviewed contract must explicitl
 
 Notes operations record outcomes durably. Ambiguous checklist matches are not changed, partial results are preserved, and deleting a whole note requires a later confirmation from the same requester. An uncertain mutation is not safe to replay automatically.
 
+For batch deletion, ask for an explicit set of up to 20 notes. The agent presents the exact list before any deletion. The same requester must confirm the complete list in a later message within ten minutes. A renamed, changed, locked, missing, or inaccessible note rejects the batch before deletion starts. Each note is rechecked immediately before its own deletion; a later failure stops the remaining notes and reports each result. Completed deletions are not rolled back, and an uncertain result never permits an automatic retry. Notes move to **Recently Deleted**, not permanent erasure.
+
+Only one pending deletion review is kept per requester per chat. A new batch request replaces the previous review. Single-note deletion remains supported; a single-note confirmation cannot approve part of a batch.
+
 
 ## Google
 
