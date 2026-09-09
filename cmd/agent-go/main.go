@@ -57,7 +57,7 @@ func main() {
 	resolveReviewedNote := flag.Bool("resolve-reviewed-note", false, "abandon only the reviewed Notes attempt without replay or session reset; request remains outstanding")
 	abandonUnknownAck := flag.Bool("abandon-reviewed-unknown-ack", false, "explicitly abandon the reviewed unknown acknowledgement without claiming delivery or retrying it")
 	reviewSHA256 := flag.String("review-sha256", "", "fingerprint of the reviewed Notes attempt")
-	retryBinding := flag.Int64("retry-binding-rejected-job", 0, "requeue an exact prelaunch MCP binding rejection after operator repair; daemon must be stopped")
+	retryBinding := flag.Int64("retry-binding-rejected-job", 0, "requeue an exact prelaunch binding or unexpected-source rejection after operator repair; daemon must be stopped")
 	retrySchema := flag.Int64("retry-schema-rejected-job", 0, "requeue a proven pre-execution schema rejection; daemon must be stopped")
 	transcriptPath := flag.String("recovery-transcript", "", "native Codex transcript proving the rejected turn executed no actions")
 	recoveryReason := flag.String("recovery-reason", "", "external-effect review evidence for interrupted-attempt resolution")

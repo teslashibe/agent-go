@@ -13,6 +13,10 @@ func TestRetryBindingRejectedAttempt(t *testing.T) {
 		reject         bool
 	}{
 		{"success", "", false},
+		{"unexpected source", "UPDATE jobs SET error='codex: interactive configuration blocked: unexpected configuration source' WHERE id=1", false},
+		{"source error suffix", "UPDATE jobs SET error='codex: interactive configuration blocked: unexpected configuration source: other' WHERE id=1", true},
+		{"source error with effect", "UPDATE jobs SET error='codex: interactive configuration blocked: unexpected configuration source' WHERE id=1; INSERT INTO tool_operations(job_id,operation_id,arguments,state) VALUES(1,'x','{}','completed')", true},
+		{"changed reviewed source", "UPDATE jobs SET error='codex: interactive configuration blocked: reviewed source changed' WHERE id=1", true},
 		{"wrong error", "UPDATE jobs SET error='codex: context canceled' WHERE id=1", true},
 		{"wrong source", "", true},
 		{"running", "UPDATE jobs SET state='running' WHERE id=1", true},
