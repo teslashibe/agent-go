@@ -1,0 +1,205 @@
+#!/usr/bin/env python3
+"""Verify one committed revision on the Mini without touching live runtime state."""
+
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import platform
+import shutil
+import subprocess
+import sys
+import tarfile
+import time
+import uuid
+
+
+def capture(args, cwd=None):
+    return subprocess.check_output(args, cwd=cwd, text=True).strip()
+
+
+def digest(path):
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def require_free_space(path, reclaim_cache=False):
+    if shutil.disk_usage(path).free >= 4 * 1024**3:
+        return False
+    if reclaim_cache:
+        # Completed stages can leave a large Go build cache. Modules must stay
+        # available for the remaining offline stages; evidence is never removed.
+        cleanup_caches(path, names=("cache",))
+        (path / "cache").mkdir(mode=0o700)
+        if shutil.disk_usage(path).free >= 4 * 1024**3:
+            return True
+    raise RuntimeError("less than 4 GiB free on the verification volume; free space before retrying")
+
+
+def cleanup_caches(output, names=("cache", "modules")):
+    def retry(function, path, _error):
+        # Go's downloaded module directories are normally read-only.
+        Path(path).parent.chmod(0o700)
+        if not Path(path).is_symlink():
+            Path(path).chmod(0o700)
+        function(path)
+
+    removed = []
+    for name in names:
+        path = output / name
+        if path.is_symlink():
+            path.unlink()
+        elif path.is_dir():
+            shutil.rmtree(path, onerror=retry)
+        else:
+            continue
+        removed.append(name)
+    return removed
+
+
+def short_test_directory():
+    # Darwin sockaddr_un permits only 104 bytes, including the trailing NUL.
+    # Go appends the test name and two random directory components underneath.
+    for _ in range(100):
+        path = Path("/tmp/v" + uuid.uuid4().hex[:3])
+        try:
+            path.mkdir(mode=0o700)
+            return path
+        except FileExistsError:
+            continue
+    raise RuntimeError("could not allocate a short private test directory")
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--repo", type=Path, default=Path(__file__).resolve().parent.parent)
+    parser.add_argument("--revision", default="HEAD")
+    parser.add_argument("--output", type=Path, required=True, help="new evidence directory outside the repository")
+    parser.add_argument("--test-exec", type=Path, required=True, help="established private signing/test runner")
+    parser.add_argument("--go", default="go", help="Go launcher; the selected toolchain is recorded")
+    parser.add_argument("--keep-caches", action="store_true", help="retain regenerable caches for a following fixture run")
+    args = parser.parse_args()
+    if platform.system() != "Darwin" or platform.machine() != "arm64":
+        parser.error("verification must execute on the Apple silicon Mac mini")
+    repo = Path(capture(["git", "rev-parse", "--show-toplevel"], args.repo)).resolve()
+    revision = capture(["git", "rev-parse", "--verify", args.revision + "^{commit}"], repo)
+    output = args.output.expanduser().resolve()
+    if output == repo or repo in output.parents:
+        parser.error("evidence must be outside the source repository")
+    runner = args.test_exec.expanduser().resolve(strict=True)
+    if not runner.is_file() or not os.access(runner, os.X_OK):
+        parser.error("test runner must be an existing executable file")
+    output.mkdir(mode=0o700, parents=True, exist_ok=False)
+    summary = {"revision": revision, "tree": capture(["git", "rev-parse", revision + "^{tree}"], repo),
+               "verifier_sha256": digest(Path(__file__)),
+               "platform": platform.platform(), "test_runner_sha256": digest(runner),
+               "checks": [], "status": "running",
+               "native_tests": "not run", "authenticated_model_tests": "not run"}
+    short_tmp = None
+
+    def save():
+        (output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
+
+    def check(name, command, env, cwd, empty=False):
+        if require_free_space(output, reclaim_cache=True):
+            summary.setdefault("cache_reclaimed_before", []).append(name)
+            save()
+        log = output / (name + ".log")
+        start = time.monotonic()
+        with log.open("w") as stream:
+            result = subprocess.run(command, cwd=cwd, env=env, stdout=stream, stderr=subprocess.STDOUT)
+        passed = result.returncode == 0 and (not empty or log.stat().st_size == 0)
+        summary["checks"].append({"name": name, "command": command, "exit_code": result.returncode,
+                                  "passed": passed, "seconds": round(time.monotonic() - start, 2),
+                                  "log": log.name})
+        save()
+        print(("PASS " if passed else "FAIL ") + name, flush=True)
+        if not passed:
+            raise RuntimeError(name + " failed; inspect " + str(log))
+
+    try:
+        require_free_space(output)
+        archive = output / "source.tar"
+        with archive.open("wb") as stream:
+            subprocess.run(["git", "archive", "--format=tar", revision], cwd=repo, stdout=stream, check=True)
+        summary["source_archive_sha256"] = digest(archive)
+        source = output / "source"
+        source.mkdir()
+        with tarfile.open(archive) as archive_file:
+            for member in archive_file.getmembers():
+                target = source / member.name
+                if member.issym() or member.islnk() or not (member.isfile() or member.isdir()) or source not in target.resolve().parents:
+                    raise RuntimeError("unsupported archive member: " + member.name)
+            archive_file.extractall(source)
+        # Resolve the committed source's toolchain before replacing HOME. No builds run here.
+        goroot = capture([args.go, "env", "GOROOT"], source)
+        module_cache = Path(capture([args.go, "env", "GOMODCACHE"], source))
+        go = str(Path(goroot) / "bin/go")
+        summary["go_version"] = capture([go, "version"])
+        for name in ("home", "codex", "cache"):
+            (output / name).mkdir(mode=0o700)
+        # APFS copy-on-write keeps prepared modules isolated without downloading them again.
+        if module_cache.is_dir():
+            subprocess.run(["/bin/cp", "-cR", str(module_cache), str(output / "modules")], check=True)
+        else:
+            (output / "modules").mkdir()
+        short_tmp = short_test_directory()
+        env = {"PATH": str(Path(goroot) / "bin") + ":/usr/bin:/bin:/usr/sbin:/sbin",
+               "HOME": str(output / "home"), "CODEX_HOME": str(output / "codex"),
+               "GOCACHE": str(output / "cache"), "GOMODCACHE": str(output / "modules"),
+               "TMPDIR": str(short_tmp), "GOWORK": "off", "GOFLAGS": "-mod=readonly",
+               "GOTOOLCHAIN": "local", "GOPROXY": "https://proxy.golang.org,direct",
+               "GOSUMDB": "sum.golang.org", "GOPRIVATE": "", "GONOSUMDB": "", "GONOPROXY": "",
+               "LANG": "en_US.UTF-8", "PYTHONDONTWRITEBYTECODE": "1"}
+        # Only module preparation is online. No inherited AGENT_* test opt-ins or model auth.
+        check("modules", [go, "mod", "download"], env, source)
+        env.update(GOPROXY="off", GOSUMDB="off")
+        go_files = sorted(str(p.relative_to(source)) for p in source.rglob("*.go"))
+        check("format", [str(Path(goroot) / "bin/gofmt"), "-l", *go_files], env, source, empty=True)
+        check("test", [go, "test", "-json", "-count=1", "-timeout=180s", "-exec", str(runner), "./..."], env, source)
+        check("race", [go, "test", "-json", "-race", "-count=1", "-timeout=180s", "-exec", str(runner), "./..."], env, source)
+        check("vet", [go, "vet", "./..."], env, source)
+        check("build", [go, "build", "./..."], env, source)
+        if any((source / "scripts").glob("test_*.py")):
+            check("scripts", ["/usr/bin/python3", "-m", "unittest", "discover", "-s", "scripts", "-p", "test_*.py", "-v"], env, source)
+        if (source / "cmd/agent-go").is_dir():
+            check("artifact", [go, "build", "-trimpath", "-o", str(output / "agent-go"), "./cmd/agent-go"], env, source)
+            check("signed-artifact", [str(runner), str(output / "agent-go"), "-h"], env, source)
+            summary["artifact_sha256"] = digest(output / "agent-go")
+        for name in ("go.mod", "go.sum"):
+            original = subprocess.run(["git", "show", revision + ":" + name], cwd=repo, capture_output=True)
+            if original.returncode != 0:
+                if (source / name).exists():
+                    raise RuntimeError(name + " was created during verification")
+            elif not (source / name).exists() or (source / name).read_bytes() != original.stdout:
+                raise RuntimeError(name + " changed during verification")
+        summary["skipped_tests"] = []
+        for name in ("test", "race"):
+            for line in (output / (name + ".log")).read_text().splitlines():
+                try:
+                    event = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if event.get("Action") == "skip":
+                    summary["skipped_tests"].append({"check": name, "package": event.get("Package"), "test": event.get("Test")})
+        summary["status"] = "passed"
+    except Exception as error:
+        summary["status"] = "failed"
+        summary["error"] = str(error)
+        print(str(error), file=sys.stderr)
+    finally:
+        if short_tmp is not None:
+            shutil.rmtree(short_tmp)
+        try:
+            summary["removed_caches"] = [] if args.keep_caches else cleanup_caches(output)
+            summary["caches_retained"] = args.keep_caches
+        except Exception as error:
+            summary["status"] = "failed"
+            summary["cache_cleanup_error"] = str(error)
+        save()
+    print("Evidence: " + str(output), flush=True)
+    return 0 if summary["status"] == "passed" else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

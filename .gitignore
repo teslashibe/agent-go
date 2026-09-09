@@ -1,0 +1,23 @@
+# Mini install secrets. These live under ~/.local/share/agent-go, never here.
+/.worktrees/
+ship.pin
+deploy-secret.pbkdf2
+signing.keychain-db
+signing.keychain-pass
+*.p12
+*.pfx
+scripts/deploy-mini.env
+
+# Local configuration and runtime artifacts.
+/config.json
+/*.db
+/*.db-shm
+/*.db-wal
+/*.log
+/*.backup
+/*.bak
+
+# Docusaurus dependencies and generated output.
+/website/node_modules/
+/website/.docusaurus/
+/website/build/

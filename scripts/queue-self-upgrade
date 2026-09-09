@@ -1,0 +1,198 @@
+#!/usr/bin/env python3
+"""Hand an approved owner upgrade to launchd after the requesting job completes."""
+
+import argparse
+import fcntl
+import hashlib
+import importlib.util
+import json
+import os
+from pathlib import Path
+import plistlib
+import shutil
+import sqlite3
+import subprocess
+import sys
+import time
+
+
+def digest(path):
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def write_json(path, value):
+    temporary = path.with_suffix(".new")
+    temporary.write_text(json.dumps(value, indent=2) + "\n")
+    temporary.replace(path)
+
+
+def installer(path):
+    spec = importlib.util.spec_from_file_location("installer", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def owner_job(db, config, source):
+    matches = []
+    for job_id, raw, sender in db.execute("SELECT id,source,sender FROM jobs WHERE state='running'"):
+        identity = json.loads(raw)
+        if identity.get("Group") or identity.get("Name") != config["source"]:
+            continue
+        for agent in config.get("agents", []):
+            workspace = agent.get("work_dir", "")
+            allowed = agent.get("allowed_senders", [])
+            # store.Source.key stores a single-owner DM as Sender, omitting
+            # Group and AllowedSenders. Match that persisted identity exactly.
+            expected = {"Name": config["source"], "Sender": sender,
+                        "ChatID": agent["chat_id"], "ChatGUID": agent["chat_guid"]}
+            if (not agent.get("group") and len(allowed) == 1 and sender == allowed[0]
+                    and identity == expected
+                    and workspace and Path(workspace).is_absolute()
+                    and Path(workspace).resolve() in source.parents):
+                matches.append({"id": job_id, "source": raw, "sender": sender})
+    if len(matches) != 1:
+        raise RuntimeError("requires exactly one running authenticated coding DM job")
+    return matches[0]
+
+
+def verified_artifact(source, evidence):
+    summary = json.loads((evidence / "summary.json").read_text())
+    required = {"modules", "format", "test", "race", "vet", "build", "scripts", "artifact", "signed-artifact"}
+    passed = {check["name"] for check in summary.get("checks", []) if check.get("passed") is True}
+    if summary.get("status") != "passed" or not required.issubset(passed):
+        raise RuntimeError("complete passed Mini verification is required")
+    tree = subprocess.check_output(["git", "rev-parse", "HEAD^{tree}"], cwd=source, text=True).strip()
+    branch = subprocess.check_output(["git", "branch", "--show-current"], cwd=source, text=True).strip()
+    dirty = subprocess.check_output(["git", "status", "--porcelain", "--untracked-files=no"], cwd=source)
+    if branch != "main" or dirty or tree != summary.get("tree"):
+        raise RuntimeError("clean merged main must match the verified tree")
+    if summary.get("verifier_sha256") != digest(source / "scripts/verify-mini"):
+        raise RuntimeError("verification script differs from reviewed main")
+    artifact = evidence / "agent-go"
+    if digest(artifact) != summary.get("artifact_sha256"):
+        raise RuntimeError("verified artifact hash differs")
+    return artifact, summary
+
+
+def request(args):
+    source = args.source.resolve(strict=True)
+    if "module github.com/teslashibe/agent-go\n" not in (source / "go.mod").read_text():
+        raise RuntimeError("source must be the agent-go repository")
+    deploy = installer(source / "scripts/deploy-mini-remote.py")
+    config = json.loads(Path(deploy.CONFIG).read_text())
+    if Path(config["state_path"]).resolve() != Path(deploy.DB).resolve():
+        raise RuntimeError("configured state path differs from installer")
+    db = deploy.open_retained_db()
+    try:
+        job = owner_job(db, config, source)
+    finally:
+        db.close()
+    artifact, summary = verified_artifact(source, args.verification.resolve(strict=True))
+    deploy.preflight(str(artifact))
+    if deploy.requirement(str(artifact)) != deploy.requirement(deploy.LIVE):
+        raise RuntimeError("candidate signing requirement differs")
+    revision = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=source, text=True).strip()
+    directory = Path(deploy.ROOT) / "upgrades" / str(job["id"])
+    directory.mkdir(parents=True, mode=0o700, exist_ok=False)
+    for original, name in [(artifact, "agent-go"), (Path(__file__), "worker.py"),
+                           (source / "scripts/deploy-mini-remote.py", "installer.py")]:
+        shutil.copyfile(original, directory / name)
+        (directory / name).chmod(0o700)
+    identity = os.stat(deploy.DB)
+    record = {"job": job, "revision": revision, "artifact_sha256": digest(directory / "agent-go"),
+              "installer_sha256": digest(directory / "installer.py"), "config_sha256": digest(deploy.CONFIG),
+              "database_identity": [identity.st_dev, identity.st_ino], "expires": time.time() + 900,
+              "verification": summary, "status": "queued"}
+    path = directory / "request.json"
+    write_json(path, record)
+    label = "ai.teslashibe.agent-upgrade-" + str(job["id"])
+    service = {"Label": label, "RunAtLoad": True, "KeepAlive": False,
+               "ProgramArguments": ["/usr/bin/python3", str(directory / "worker.py"), "--run", str(path)],
+               "StandardOutPath": str(directory / "worker.log"), "StandardErrorPath": str(directory / "worker.log")}
+    plist = directory / "worker.plist"
+    plist.write_bytes(plistlib.dumps(service))
+    subprocess.run(["launchctl", "bootstrap", deploy.DOMAIN, str(plist)], check=True, capture_output=True)
+    print(json.dumps({"status": "queued", "job_id": job["id"], "revision": revision,
+                      "evidence": str(directory), "message": "Upgrade is pending job completion, not yet installed."}))
+
+
+def ready(db, record, deploy):
+    row = db.execute("SELECT state,source,sender FROM jobs WHERE id=?", (record["job"]["id"],)).fetchone()
+    if not row or row[1:] != (record["job"]["source"], record["job"]["sender"]):
+        raise RuntimeError("requesting job identity changed")
+    if row[0] == "running":
+        return False
+    if row[0] != "completed":
+        raise RuntimeError("requesting job did not complete; upgrade refused")
+    return not any(deploy.idle(db).values())
+
+
+def run(path):
+    directory = path.parent
+    with (directory / "worker.lock").open("w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        record = json.loads(path.read_text())
+        if record["status"] != "queued":
+            raise RuntimeError("upgrade already attempted; inspect evidence before recovery")
+        record["status"] = "waiting"
+        write_json(path, record)
+        try:
+            if digest(directory / "installer.py") != record["installer_sha256"]:
+                raise RuntimeError("installer changed")
+            deploy = installer(directory / "installer.py")
+            while True:
+                if time.time() >= record["expires"]:
+                    raise RuntimeError("upgrade expired before safe idle")
+                identity = os.stat(deploy.DB)
+                if [identity.st_dev, identity.st_ino] != record["database_identity"]:
+                    raise RuntimeError("database changed")
+                if digest(deploy.CONFIG) != record["config_sha256"]:
+                    raise RuntimeError("configuration changed")
+                db = deploy.open_retained_db()
+                try:
+                    done = ready(db, record, deploy)
+                finally:
+                    db.close()
+                if done:
+                    break
+                time.sleep(1)
+            if digest(directory / "agent-go") != record["artifact_sha256"]:
+                raise RuntimeError("staged artifact changed")
+            record["status"] = "deploying"
+            write_json(path, record)
+            # The existing installer repeats the WAL-aware idle check before
+            # and after stop, then handles signing, backup, health and rollback.
+            with (directory / "deployment.log").open("w") as output:
+                result = subprocess.run(["/usr/bin/python3", str(directory / "installer.py"),
+                                         "--staged", str(directory / "agent-go"), "--version", record["revision"]],
+                                        stdout=output, stderr=subprocess.STDOUT)
+            if result.returncode:
+                raise RuntimeError("installer failed; inspect deployment evidence, do not replay")
+            record["status"] = "completed"
+        except Exception as error:
+            record["status"] = "failed"
+            record["error"] = str(error)
+            raise
+        finally:
+            write_json(path, record)
+
+
+def main():
+    os.umask(0o077)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--confirm", action="store_true")
+    parser.add_argument("--source", type=Path, default=Path(__file__).resolve().parent.parent)
+    parser.add_argument("--verification", type=Path)
+    parser.add_argument("--run", type=Path, help=argparse.SUPPRESS)
+    args = parser.parse_args()
+    if args.run:
+        run(args.run)
+    elif not args.confirm or args.verification is None:
+        parser.error("approved upgrade requires --confirm and --verification")
+    else:
+        request(args)
+
+
+if __name__ == "__main__":
+    main()

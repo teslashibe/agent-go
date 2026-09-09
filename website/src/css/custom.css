@@ -1,0 +1,33 @@
+:root {
+  --ifm-color-primary: #2359c4;
+  --ifm-color-primary-dark: #2050b0;
+  --ifm-color-primary-darker: #1e4ca7;
+  --ifm-color-primary-darkest: #193e89;
+  --ifm-color-primary-light: #2e66da;
+  --ifm-color-primary-lighter: #3b70dd;
+  --ifm-color-primary-lightest: #628de4;
+  --ifm-font-family-base: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --ifm-heading-font-weight: 650;
+  --ifm-line-height-base: 1.7;
+  --ifm-code-font-size: 90%;
+  --ifm-navbar-shadow: 0 1px 0 var(--ifm-color-emphasis-200);
+  --doc-sidebar-width: 280px;
+}
+
+[data-theme='dark'] {
+  --ifm-color-primary: #8bb5ff;
+  --ifm-color-primary-dark: #64a0ff;
+  --ifm-color-primary-darker: #5093ff;
+  --ifm-color-primary-darkest: #1670ff;
+  --ifm-color-primary-light: #b2ceff;
+  --ifm-color-primary-lighter: #c6daff;
+  --ifm-color-primary-lightest: #ffffff;
+  --ifm-background-color: #15181e;
+}
+
+.navbar__title { letter-spacing: -0.04em; font-size: 1.2rem; }
+.markdown h1 { letter-spacing: -0.04em; line-height: 1.15; }
+.markdown h2 { letter-spacing: -0.025em; }
+.markdown table { font-size: 0.94rem; }
+.footer { border-top: 1px solid var(--ifm-color-emphasis-200); padding: 1.4rem; }
+.footer__copyright { color: var(--ifm-color-emphasis-700); font-size: 0.85rem; }

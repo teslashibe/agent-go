@@ -1,0 +1,144 @@
+#!/bin/bash
+# One-shot Mac mini deploy for agent-go.
+#
+# This builds arm64, signs with an existing selected identity, verifies designated
+#   requirement → scp → idle check → bootout → backup → atomic replace →
+#   bootstrap → wait until the process stays up → rollback on failure.
+#
+# Never ad-hoc sign, never export the key to the mini, never kickstart, and
+# never overwrite a running binary in place.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+if [[ -f "${ROOT}/scripts/deploy-mini.env" ]]; then
+	# Local host/key only. This file is gitignored.
+	set -a
+	# shellcheck disable=SC1091
+	source "${ROOT}/scripts/deploy-mini.env"
+	set +a
+fi
+HOST="${AGENT_DEPLOY_HOST:?set AGENT_DEPLOY_HOST or scripts/deploy-mini.env}"
+SSH_KEY="${AGENT_DEPLOY_KEY:-}"
+SIGNER="${AGENT_DEPLOY_SIGNER:-}"
+SSH_OPTS=(-o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15)
+if [[ -n "${SSH_KEY}" ]]; then
+	SSH_OPTS=(-i "${SSH_KEY}" -o IdentitiesOnly=yes "${SSH_OPTS[@]}")
+fi
+SOURCE="${ROOT}"
+CONFIG=""
+RESTART_ONLY=0
+VERSION=""
+
+usage() {
+	cat <<'EOF'
+Usage: scripts/deploy-mini [--source DIR] [--version NAME] [--config FILE] [--restart-only]
+
+  --source DIR     agent-go checkout to build (default: this repo)
+  --version NAME   backup label (default: exact git tag or short SHA)
+  --config FILE    optional config.json to install with the binary
+  --restart-only   bootout + bootstrap the already-installed binary
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+	case "$1" in
+	--source)
+		SOURCE="$(cd "$2" && pwd)"
+		shift 2
+		;;
+	--version)
+		VERSION="$2"
+		shift 2
+		;;
+	--config)
+		CONFIG="$2"
+		shift 2
+		;;
+	--restart-only)
+		RESTART_ONLY=1
+		shift
+		;;
+	-h | --help)
+		usage
+		exit 0
+		;;
+	*)
+		echo "unknown argument: $1" >&2
+		usage >&2
+		exit 2
+		;;
+	esac
+done
+
+ssh_mini() {
+	ssh "${SSH_OPTS[@]}" "${HOST}" "$@"
+}
+
+scp_mini() {
+	scp "${SSH_OPTS[@]}" "$@"
+}
+
+requirement() {
+	local text
+	text="$(codesign -d -r- "$1" 2>&1)"
+	printf '%s\n' "${text}" | awk -F ' => ' '/^designated => / {print $2; found=1} END {if (!found) exit 1}'
+}
+
+remote_requirement="$(ssh_mini codesign -d -r- '$HOME/.local/bin/agent-go' 2>&1 | awk -F ' => ' '/^designated => / {print $2; found=1} END {if (!found) exit 1}')"
+remote_identifier="$(ssh_mini codesign -dv --verbose=2 '$HOME/.local/bin/agent-go' 2>&1 | awk -F= '/^Identifier=/{print $2; found=1} END {if (!found) exit 1}')"
+if [[ -z "${VERSION}" ]]; then
+	VERSION="$(git -C "${SOURCE}" describe --tags --exact-match 2>/dev/null || git -C "${SOURCE}" rev-parse --short HEAD)"
+fi
+if [[ ! "${VERSION}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]]; then
+	echo "invalid version label" >&2
+	exit 2
+fi
+
+STAGED="/tmp/agent-go-${VERSION}"
+REMOTE_STAGED="/tmp/agent-go-${VERSION}"
+REMOTE_PY="/tmp/deploy-mini-remote.py"
+
+if [[ "${RESTART_ONLY}" -eq 0 ]]; then
+	if [[ -z "${SIGNER}" ]]; then
+		SIGNER="$(printf '%s\n' "${remote_requirement}" | awk -F'H"' '{print $2}' | cut -d'"' -f1 | tr '[:lower:]' '[:upper:]')"
+	fi
+	if [[ -z "${SIGNER}" ]] || ! security find-identity -v -p codesigning | awk -v signer="${SIGNER}" 'index($0, signer) {found=1} END {exit !found}'; then
+		echo "selected signing identity is not available; refusing to deploy" >&2
+		exit 1
+	fi
+	if [[ ! -d "${SOURCE}/cmd/agent-go" ]]; then
+		echo "not an agent-go checkout: ${SOURCE}" >&2
+		exit 1
+	fi
+	(
+		cd "${SOURCE}"
+		GOWORK=off GOOS=darwin GOARCH=arm64 go build -trimpath -o "${STAGED}" ./cmd/agent-go
+	)
+	codesign --force --sign "${SIGNER}" --identifier "${remote_identifier}" "${STAGED}"
+	codesign --verify --strict --verbose=2 "${STAGED}"
+	DR="$(requirement "${STAGED}")"
+	if [[ "${DR}" != "${remote_requirement}" ]]; then
+		echo "selected identity cannot reproduce the installed designated requirement" >&2
+		exit 1
+	fi
+	scp_mini "${STAGED}" "${HOST}:${REMOTE_STAGED}"
+fi
+
+scp_mini "${ROOT}/scripts/deploy-mini-remote.py" "${HOST}:${REMOTE_PY}"
+
+REMOTE_ARGS=(--version "${VERSION}")
+if [[ "${RESTART_ONLY}" -eq 1 ]]; then
+	REMOTE_ARGS+=(--restart-only)
+else
+	REMOTE_ARGS+=(--staged "${REMOTE_STAGED}")
+	if [[ -n "${CONFIG}" ]]; then
+		REMOTE_CONFIG="/tmp/agent-config-${VERSION}.json"
+		scp_mini "${CONFIG}" "${HOST}:${REMOTE_CONFIG}"
+		REMOTE_ARGS+=(--config "${REMOTE_CONFIG}")
+	fi
+fi
+
+printf -v remote_command '%q ' /usr/bin/python3 "${REMOTE_PY}" "${REMOTE_ARGS[@]}"
+ssh_mini "${remote_command}"
+ssh_mini 'launchctl print "gui/$(id -u)/ai.teslashibe.agent"' | grep -E 'state =|pid =|last exit|runs ='
+echo "deployed ${VERSION}"

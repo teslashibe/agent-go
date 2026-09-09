@@ -1,0 +1,22 @@
+{
+  "transport": "local",
+  "source": "REPLACE_WITH_MAC_ACCOUNT_DATABASE_GENERATION",
+  "state_path": "/ABSOLUTE/PRIVATE/RUNTIME/state.db",
+  "work_dir": "/ABSOLUTE/PRIVATE/SCRATCH",
+  "imsg_path": "/ABSOLUTE/PATH/TO/imsg",
+  "codex_path": "/ABSOLUTE/PATH/TO/codex",
+  "model": "REPLACE_WITH_AVAILABLE_MODEL",
+  "execution_policy": "yolo",
+  "document_attachments": false,
+  "agents": [
+    {
+      "name": "assistant",
+      "group": false,
+      "chat_id": 0,
+      "chat_guid": "iMessage;-;REPLACE_WITH_EXACT_CHAT_GUID",
+      "allowed_senders": [
+        "REPLACE_WITH_EXACT_SENDER_IDENTITY"
+      ]
+    }
+  ]
+}

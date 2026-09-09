@@ -1,0 +1,67 @@
+#!/usr/bin/env python3
+"""Keep a dedicated, logged-in Mini session available for native automation."""
+
+import argparse
+import json
+import os
+from pathlib import Path
+import platform
+import plistlib
+import subprocess
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--confirm", action="store_true")
+    args = parser.parse_args()
+    if not args.confirm:
+        parser.error("--confirm is required for the approved dedicated-session setup")
+    home = Path.home()
+    agents = home / "Library/LaunchAgents"
+    if platform.system() != "Darwin" or not (agents / "ai.teslashibe.agent.plist").is_file():
+        parser.error("run in the dedicated Mac account with agent-go installed")
+    label = "ai.teslashibe.agent-awake"
+    target = agents / (label + ".plist")
+    settings = {
+        "Label": label,
+        "ProgramArguments": ["/usr/bin/caffeinate", "-dis"],
+        "RunAtLoad": True,
+        "KeepAlive": True,
+        "ThrottleInterval": 10,
+    }
+    if target.exists() and plistlib.loads(target.read_bytes()) != settings:
+        raise SystemExit("existing awake service differs; review it before changing it")
+    backup = home / ".local/share/agent-go/awake-session-before.json"
+    if not backup.exists():
+        previous = subprocess.run(
+            ["defaults", "-currentHost", "read", "com.apple.screensaver", "idleTime"],
+            capture_output=True, text=True,
+        )
+        value = int(previous.stdout.strip()) if previous.returncode == 0 else None
+        with backup.open("x") as stream:
+            json.dump({"screensaver_idle_seconds": value}, stream)
+        backup.chmod(0o600)
+    subprocess.run(
+        ["defaults", "-currentHost", "write", "com.apple.screensaver", "idleTime", "-int", "0"],
+        check=True,
+    )
+    if not target.exists():
+        with target.open("xb") as stream:
+            plistlib.dump(settings, stream)
+        target.chmod(0o600)
+    domain = "gui/" + str(os.getuid())
+    loaded = subprocess.run(["launchctl", "print", domain + "/" + label], capture_output=True)
+    if loaded.returncode != 0:
+        subprocess.run(["launchctl", "bootstrap", domain, str(target)], check=True)
+    subprocess.run(["launchctl", "print", domain + "/" + label], capture_output=True, check=True)
+    value = subprocess.check_output(
+        ["defaults", "-currentHost", "read", "com.apple.screensaver", "idleTime"], text=True,
+    ).strip()
+    if value != "0":
+        raise SystemExit("screen saver setting did not persist")
+    print("Dedicated session awake service installed; prior idle setting saved.")
+    print("This does not unlock the desktop or replace login after restart.")
+
+
+if __name__ == "__main__":
+    main()

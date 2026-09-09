@@ -1,0 +1,141 @@
+#!/bin/bash
+# Install a signed agent-go on this Mac using the v0.7.0 launch path.
+#
+# Build and sign here when the established identity is in the Mini signing
+# keychain, then idle-check, bootout, backup, atomic replace, bootstrap,
+# health wait, rollback. Never kickstart or overwrite the live inode.
+set -euo pipefail
+
+SIGNING_KEYCHAIN="${HOME}/.local/share/agent-go/signing.keychain-db"
+SIGNING_KEYCHAIN_PASS="${HOME}/.local/share/agent-go/signing.keychain-pass"
+LIVE="${HOME}/.local/bin/agent-go"
+SIGNER="${AGENT_SHIP_SIGNER:-}"
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+SOURCE=""
+STAGED=""
+VERSION=""
+RESTART_ONLY=0
+CONFIRMED=0
+
+usage() {
+	cat <<'EOF'
+Usage: scripts/ship-self --confirm [--source DIR] [--staged FILE] [--version NAME] [--restart-only]
+
+  --confirm        required; the coding DM must get an explicit yes first
+  --source DIR     agent-go checkout to build and sign on this Mac
+  --staged FILE    already-signed binary; skips local build and sign
+  --version NAME   backup label (default: exact git tag or short SHA)
+  --restart-only   bootout + bootstrap the already-installed binary
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+	case "$1" in
+	--source)
+		SOURCE="$(cd "$2" && pwd)"
+		shift 2
+		;;
+	--staged)
+		STAGED="$2"
+		shift 2
+		;;
+	--version)
+		VERSION="$2"
+		shift 2
+		;;
+	--restart-only)
+		RESTART_ONLY=1
+		shift
+		;;
+	--confirm)
+		CONFIRMED=1
+		shift
+		;;
+	-h | --help)
+		usage
+		exit 0
+		;;
+	*)
+		echo "unknown argument: $1" >&2
+		usage >&2
+		exit 2
+		;;
+	esac
+done
+
+if [[ "${CONFIRMED}" -ne 1 ]]; then
+	echo "refusing to install without --confirm" >&2
+	exit 2
+fi
+
+requirement() {
+	local text
+	text="$(codesign -d -r- "$1" 2>&1)"
+	printf '%s\n' "${text}" | awk -F ' => ' '/^designated => / {print $2; found=1} END {if (!found) exit 1}'
+}
+
+unlock_signer() {
+	if [[ -f "${SIGNING_KEYCHAIN}" && -f "${SIGNING_KEYCHAIN_PASS}" ]]; then
+		security unlock-keychain -p "$(cat "${SIGNING_KEYCHAIN_PASS}")" "${SIGNING_KEYCHAIN}"
+		security list-keychains -d user -s "${SIGNING_KEYCHAIN}" "${HOME}/Library/Keychains/login.keychain-db"
+	fi
+	if [[ -z "${SIGNER}" ]]; then
+		SIGNER="$(requirement "${LIVE}" | awk -F'H"' '{print $2}' | cut -d'"' -f1 | tr '[:lower:]' '[:upper:]')"
+	fi
+	[[ -n "${SIGNER}" ]] && security find-identity -v -p codesigning | awk -v signer="${SIGNER}" 'index($0, signer) {found=1} END {exit !found}'
+}
+
+if [[ -z "${VERSION}" ]]; then
+	if [[ -n "${SOURCE}" ]]; then
+		VERSION="$(git -C "${SOURCE}" describe --tags --exact-match 2>/dev/null || git -C "${SOURCE}" rev-parse --short HEAD)"
+	else
+		VERSION="$(date +%Y%m%d-%H%M%S)"
+	fi
+fi
+if [[ ! "${VERSION}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]]; then
+	echo "invalid version label" >&2
+	exit 2
+fi
+
+if [[ "${RESTART_ONLY}" -eq 0 && -z "${STAGED}" ]]; then
+	if [[ -z "${SOURCE}" ]]; then
+		SOURCE="${ROOT}"
+	fi
+	if [[ ! -d "${SOURCE}/cmd/agent-go" ]]; then
+		echo "not an agent-go checkout: ${SOURCE}" >&2
+		exit 1
+	fi
+	if ! unlock_signer; then
+		echo "selected signing identity is not available; stage a signed binary and pass --staged" >&2
+		exit 1
+	fi
+	IDENTIFIER="$(codesign -dv --verbose=2 "${LIVE}" 2>&1 | awk -F= '/^Identifier=/{print $2; found=1} END {if (!found) exit 1}')"
+	EXPECTED_DR="$(requirement "${LIVE}")"
+	STAGED="/tmp/agent-go-${VERSION}"
+	(
+		cd "${SOURCE}"
+		GOWORK=off GOOS=darwin GOARCH=arm64 go build -trimpath -o "${STAGED}" ./cmd/agent-go
+	)
+	codesign --force --sign "${SIGNER}" --identifier "${IDENTIFIER}" "${STAGED}"
+	codesign --verify --strict --verbose=2 "${STAGED}"
+	DR="$(requirement "${STAGED}")"
+	if [[ "${DR}" != "${EXPECTED_DR}" ]]; then
+		echo "selected identity cannot reproduce the installed designated requirement" >&2
+		exit 1
+	fi
+fi
+
+if [[ "${RESTART_ONLY}" -eq 0 && ! -f "${STAGED}" ]]; then
+	echo "missing staged binary: ${STAGED}" >&2
+	exit 1
+fi
+
+REMOTE_ARGS=(--version "${VERSION}")
+if [[ "${RESTART_ONLY}" -eq 1 ]]; then
+	REMOTE_ARGS+=(--restart-only)
+else
+	REMOTE_ARGS+=(--staged "${STAGED}")
+fi
+
+exec /usr/bin/python3 "${ROOT}/scripts/deploy-mini-remote.py" "${REMOTE_ARGS[@]}"
