@@ -189,28 +189,8 @@ func (b *Bridge) executeNoteAction(ctx context.Context, jobID int64, action stor
 		}
 		return b.store.StartNoteAction(ctx, b.config.Source, jobID, action.Action, noteID)
 	}
-	finish := func(effectErr error) error {
-		if effectErr != nil {
-			out.fail("Could not verify the Notes operation", effectErr)
-		}
-		state := "completed"
-		if out.IsError {
-			state = "failed"
-		}
-		if out.ReplayUnsafe {
-			state = "unknown"
-		}
-		persist, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-		defer cancel()
-		if e := b.store.FinishNoteAction(persist, b.config.Source, jobID, state, out.Message); e != nil {
-			out.fail("Could not persist Notes outcome", ErrUncertain)
-			return errors.Join(ErrUncertain, e)
-		}
-		if out.ReplayUnsafe {
-			return errors.Join(ErrUncertain, effectErr)
-		}
-		return nil
-	}
+	finish := func(effectErr error) error { return b.finishNoteAction(ctx, jobID, &out, effectErr) }
+
 	if action.Action == "delete_note" || action.Action == "confirm_delete_note" {
 		sender, e := b.store.JobSender(ctx, b.config.Source, jobID)
 		if e != nil {
@@ -238,25 +218,11 @@ func (b *Bridge) executeNoteAction(ctx context.Context, jobID int64, action stor
 			out.fail("Delete confirmation rejected: missing, expired, changed target, or another sender", nil)
 			return
 		}
-		if err = start(); err != nil {
+		if e = b.store.ConsumeNoteConfirmation(ctx, b.config.Source, c, time.Now()); e != nil {
+			out.fail("Delete confirmation rejected: already consumed or changed", nil)
 			return
 		}
-		e = b.notes.MoveToRecentlyDeleted(ctx, noteID)
-		persist, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-		defer cancel()
-		if e == nil {
-			if markErr := b.store.MarkNoteDeleted(persist, b.config.Source, noteID); markErr != nil {
-				e = errors.Join(ErrUncertain, markErr)
-			}
-		}
-		if clearErr := b.store.ClearNoteConfirmation(persist, b.config.Source, sender); clearErr != nil {
-			e = errors.Join(ErrUncertain, e, clearErr)
-		}
-		if e == nil {
-			out.Message = "Moved to Recently Deleted and verified inactive"
-		}
-		err = finish(e)
-		return
+		return b.deleteConfirmedNote(ctx, jobID, operationID, c.Targets[0])
 	}
 	if creating {
 		var payload createNotePayload

@@ -29,6 +29,12 @@ func (s *Store) ConfigureNotes(ctx context.Context, source Source, notes []NoteS
   source TEXT NOT NULL REFERENCES sources(source),sender TEXT NOT NULL,kind TEXT NOT NULL,
   note_id TEXT NOT NULL,title TEXT NOT NULL,modified_at INTEGER NOT NULL,created_at INTEGER NOT NULL,
   PRIMARY KEY(source,sender)
+ );
+ CREATE TABLE IF NOT EXISTS note_confirmation_targets (
+  source TEXT NOT NULL,sender TEXT NOT NULL,position INTEGER NOT NULL,
+  note_id TEXT NOT NULL,title TEXT NOT NULL,modified_at INTEGER NOT NULL,
+  PRIMARY KEY(source,sender,note_id), UNIQUE(source,sender,position),
+  FOREIGN KEY(source,sender) REFERENCES note_confirmations(source,sender) ON DELETE CASCADE
  );`)
 	if err != nil {
 		return err
@@ -249,7 +255,14 @@ func (s *Store) AuthorizePrivateNote(ctx context.Context, source Source, id stri
 	return err
 }
 
+type NoteDeletionTarget struct {
+	NoteID     string
+	Title      string
+	ModifiedAt time.Time
+}
+
 type NoteConfirmation struct {
+	Targets    []NoteDeletionTarget
 	Sender     string
 	Kind       string
 	NoteID     string
@@ -284,29 +297,122 @@ func (s *Store) NoteByID(ctx context.Context, source Source, id string) (NoteSco
 }
 
 func (s *Store) SetNoteConfirmation(ctx context.Context, source Source, c NoteConfirmation) error {
-	if !source.AllowsSender(c.Sender) || c.NoteID == "" || c.Title == "" || c.ModifiedAt.IsZero() {
+	if len(c.Targets) == 0 {
+		c.Targets = []NoteDeletionTarget{{NoteID: c.NoteID, Title: c.Title, ModifiedAt: c.ModifiedAt}}
+	}
+	if !source.AllowsSender(c.Sender) || c.CreatedAt.IsZero() || (c.Kind != "delete_note" && c.Kind != "delete_notes") || (c.Kind == "delete_note" && len(c.Targets) != 1) {
 		return errors.New("invalid note confirmation")
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO note_confirmations(source,sender,kind,note_id,title,modified_at,created_at)
- VALUES(?,?,?,?,?,?,?) ON CONFLICT(source,sender) DO UPDATE SET kind=excluded.kind,note_id=excluded.note_id,title=excluded.title,modified_at=excluded.modified_at,created_at=excluded.created_at`,
-		source.key(), c.Sender, c.Kind, c.NoteID, c.Title, c.ModifiedAt.UnixNano(), c.CreatedAt.UnixNano())
-	return err
+	seen := map[string]bool{}
+	for _, target := range c.Targets {
+		if target.NoteID == "" || target.Title == "" || target.ModifiedAt.IsZero() || seen[target.NoteID] {
+			return errors.New("invalid note confirmation target")
+		}
+		seen[target.NoteID] = true
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	first := c.Targets[0]
+	_, err = tx.ExecContext(ctx, `INSERT INTO note_confirmations(source,sender,kind,note_id,title,modified_at,created_at)
+ VALUES(?,?,?,?,?,?,?) ON CONFLICT(source,sender) DO UPDATE SET kind=excluded.kind,note_id=excluded.note_id,title=excluded.title,modified_at=excluded.modified_at,created_at=excluded.created_at`, source.key(), c.Sender, c.Kind, first.NoteID, first.Title, first.ModifiedAt.UnixNano(), c.CreatedAt.UnixNano())
+	if err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `DELETE FROM note_confirmation_targets WHERE source=? AND sender=?`, source.key(), c.Sender); err != nil {
+		return err
+	}
+	for i, target := range c.Targets {
+		if _, err = tx.ExecContext(ctx, `INSERT INTO note_confirmation_targets(source,sender,position,note_id,title,modified_at) VALUES(?,?,?,?,?,?)`, source.key(), c.Sender, i, target.NoteID, target.Title, target.ModifiedAt.UnixNano()); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
-func (s *Store) NoteConfirmation(ctx context.Context, source Source, sender string, now time.Time) (NoteConfirmation, error) {
-	var c NoteConfirmation
+type noteConfirmationReader interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+}
+
+func loadNoteConfirmation(ctx context.Context, q noteConfirmationReader, source Source, sender string) (c NoteConfirmation, err error) {
 	var modified, created int64
-	err := s.db.QueryRowContext(ctx, `SELECT kind,note_id,title,modified_at,created_at FROM note_confirmations WHERE source=? AND sender=?`,
-		source.key(), sender).Scan(&c.Kind, &c.NoteID, &c.Title, &modified, &created)
+	err = q.QueryRowContext(ctx, `SELECT kind,note_id,title,modified_at,created_at FROM note_confirmations WHERE source=? AND sender=?`, source.key(), sender).Scan(&c.Kind, &c.NoteID, &c.Title, &modified, &created)
 	if err != nil {
 		return c, err
 	}
-	c.Sender, c.ModifiedAt, c.CreatedAt = sender, time.Unix(0, modified), time.Unix(0, created)
+	c.Sender = sender
+	c.ModifiedAt = time.Unix(0, modified)
+	c.CreatedAt = time.Unix(0, created)
+	rows, err := q.QueryContext(ctx, `SELECT note_id,title,modified_at FROM note_confirmation_targets WHERE source=? AND sender=? ORDER BY position`, source.key(), sender)
+	if err != nil {
+		return c, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var target NoteDeletionTarget
+		var stamp int64
+		if err = rows.Scan(&target.NoteID, &target.Title, &stamp); err != nil {
+			return c, err
+		}
+		target.ModifiedAt = time.Unix(0, stamp)
+		c.Targets = append(c.Targets, target)
+	}
+	if err = rows.Err(); err != nil {
+		return c, err
+	}
+	// Existing single-note confirmations survive the additive table migration.
+	if len(c.Targets) == 0 && c.Kind == "delete_note" {
+		c.Targets = []NoteDeletionTarget{{NoteID: c.NoteID, Title: c.Title, ModifiedAt: c.ModifiedAt}}
+	}
+	if len(c.Targets) == 0 || (c.Kind == "delete_note" && len(c.Targets) != 1) {
+		return c, errors.New("missing or inconsistent note confirmation targets")
+	}
+	first := c.Targets[0]
+	if first.NoteID != c.NoteID || first.Title != c.Title || !first.ModifiedAt.Equal(c.ModifiedAt) {
+		return c, errors.New("inconsistent note confirmation snapshot")
+	}
+	return c, nil
+}
+
+func (s *Store) NoteConfirmation(ctx context.Context, source Source, sender string, now time.Time) (NoteConfirmation, error) {
+	c, err := loadNoteConfirmation(ctx, s.db, source, sender)
+	if err != nil {
+		return c, err
+	}
 	if now.Sub(c.CreatedAt) > 10*time.Minute || now.Before(c.CreatedAt) {
 		_ = s.ClearNoteConfirmation(ctx, source, sender)
 		return NoteConfirmation{}, sql.ErrNoRows
 	}
 	return c, nil
+}
+
+// ConsumeNoteConfirmation atomically consumes the exact reviewed snapshot before
+// any native effect. A replacement or concurrent claim cannot reuse this approval.
+func (s *Store) ConsumeNoteConfirmation(ctx context.Context, source Source, want NoteConfirmation, now time.Time) error {
+	if !source.AllowsSender(want.Sender) {
+		return errors.New("invalid confirmation sender")
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	got, err := loadNoteConfirmation(ctx, tx, source, want.Sender)
+	if err != nil {
+		return err
+	}
+	if now.Sub(got.CreatedAt) > 10*time.Minute || now.Before(got.CreatedAt) || got.Kind != want.Kind || !got.CreatedAt.Equal(want.CreatedAt) || !slices.EqualFunc(got.Targets, want.Targets, func(a, b NoteDeletionTarget) bool {
+		return a.NoteID == b.NoteID && a.Title == b.Title && a.ModifiedAt.Equal(b.ModifiedAt)
+	}) {
+		return errors.New("note confirmation expired or changed")
+	}
+	if _, err = tx.ExecContext(ctx, `DELETE FROM note_confirmations WHERE source=? AND sender=?`, source.key(), want.Sender); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Store) ClearNoteConfirmation(ctx context.Context, source Source, sender string) error {

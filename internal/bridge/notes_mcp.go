@@ -220,12 +220,14 @@ func (t *notesTurn) call(ctx context.Context, name string, raw json.RawMessage) 
 		data, _ := json.Marshal(createNotePayload{Title: args.Title, Body: args.Body})
 		action.Text = string(data)
 	}
-	if name == "confirm_delete_note" && !t.canConfirm {
+	if (name == "confirm_delete_note" || name == "confirm_delete_notes") && !t.canConfirm {
 		out.fail("deletion requires confirmation from a subsequent user turn", nil)
+	} else if name == "delete_notes" || name == "confirm_delete_notes" {
+		out, err = t.deleteNotes(ctx, name, args)
 	} else if name != "add_note_items" {
 		out, err = t.perform(ctx, args.OperationID, 0, action, args.NoteID)
 	}
-	if name == "delete_note" {
+	if name == "delete_note" || name == "delete_notes" {
 		t.canConfirm = false
 	}
 	if name == "add_note_items" || name == "create_shared_note" || name == "create_note" {
@@ -273,6 +275,10 @@ func (t *notesTurn) call(ctx context.Context, name string, raw json.RawMessage) 
 
 func (t *notesTurn) perform(ctx context.Context, id string, index int, action store.Action, noteID string) (noteOutcome, error) {
 	result, err := t.bridge.executeNoteAction(ctx, t.jobID, action, noteID, id)
+	return t.recordNoteProgress(ctx, id, index, result, err)
+}
+
+func (t *notesTurn) recordNoteProgress(ctx context.Context, id string, index int, result noteOutcome, err error) (noteOutcome, error) {
 	persist, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
 	if progressErr := t.bridge.store.RecordToolProgress(persist, t.bridge.config.Source, t.jobID, id, index, result.encoded()); progressErr != nil {

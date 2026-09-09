@@ -95,7 +95,7 @@ func TestNoteConfirmationBoundToSenderAndExpires(t *testing.T) {
 		t.Fatal(err)
 	}
 	now := time.Now()
-	c := NoteConfirmation{Sender: source.AllowedSenders[0], Kind: "delete", NoteID: "one", Title: "List", ModifiedAt: now, CreatedAt: now}
+	c := NoteConfirmation{Sender: source.AllowedSenders[0], Kind: "delete_note", NoteID: "one", Title: "List", ModifiedAt: now, CreatedAt: now}
 	if err := s.SetNoteConfirmation(ctx, source, c); err != nil {
 		t.Fatal(err)
 	}

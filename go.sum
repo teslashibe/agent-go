@@ -78,6 +78,8 @@ github.com/teslashibe/notes v0.2.14 h1:ODMi7M3MZDtoZcCJYikgTUsvqYPXaOqQE9LtRj+OK
 github.com/teslashibe/notes v0.2.14/go.mod h1:KdekoHJuF/FP8Q8WZkvk2wX5JrZcVZ4pG8EJA/JaOIU=
 github.com/teslashibe/notes v0.2.15 h1:oF+tDfMMyUMYWJtc1WOf8JmNbOziB64ZK9/c9w+ANxE=
 github.com/teslashibe/notes v0.2.15/go.mod h1:KdekoHJuF/FP8Q8WZkvk2wX5JrZcVZ4pG8EJA/JaOIU=
+github.com/teslashibe/notes v0.2.16 h1:IV0MPAei1GxLQ9A0tZBFFxXUtlKCQkJ74+mDtigzfKg=
+github.com/teslashibe/notes v0.2.16/go.mod h1:KdekoHJuF/FP8Q8WZkvk2wX5JrZcVZ4pG8EJA/JaOIU=
 github.com/wk8/go-ordered-map/v2 v2.1.8 h1:5h/BUHu93oj4gIdvHHHGsScSTMijfx5PeYkE/fJgbpc=
 github.com/wk8/go-ordered-map/v2 v2.1.8/go.mod h1:5nJHM5DyteebpVlHnWMV0rPz6Zp7+xBAnxjb1X5vnTw=
 go.opentelemetry.io/auto/sdk v1.2.1 h1:jXsnJ4Lmnqd11kwkBV2LgLoFMZKizbCi5fNZ/ipaZ64=
