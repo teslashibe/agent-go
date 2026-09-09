@@ -14,6 +14,7 @@ This is the evidence summary for the reference Mac mini as of **9 September 2026
 | Private messaging | Authorized DM intake, model reply, and independently observed receipt in the intended conversation. |
 | Group messaging | Shared conversation with authenticated senders; replies independently received in the exact group. |
 | Standard tapbacks | Exact-message reactions independently observed in private and group chats using the optional patched native backend with SIP enabled. |
+| Batch deletion | A native fixture created three disposable private notes, reviewed and deleted exactly two, verified the third remained active, then cleaned it up through a separate confirmation. This fixture used real Apple Notes with a temporary test chat/store. |
 | Private Notes | Create, read, multiline text edits, add real checklist items, change checked state, and confirmed recoverable deletion. |
 | Group Notes | Create a fresh shared note, verify configured participants and a sharing link, read content, add/check/rename checklist items, and confirm recoverable deletion. |
 | Reviewed Notes recovery | A fresh request verified membership before using a note from an abandoned sharing attempt. Original evidence was retained; creation and invitations were not replayed. |
@@ -37,6 +38,8 @@ These are observations from recorded checks, not a live service-status dashboard
 ## Verified with model fixtures and fake services
 
 Authenticated Codex fixtures passed Notes discovery/read, multiple additions to the selected note, and clarification before ambiguous writes. Reminder fixtures passed natural-language intent, saved clarification across turns, requester/time binding, creation receipts, cancellation, and combined Notes reading plus reminder creation.
+
+Batch-deletion model fixtures also verified full-list approval, refusal, and partial approval: only explicit approval of the complete reviewed set caused deletion.
 
 Those tests used temporary stores and fake Notes/messaging backends. They establish model-to-tool behavior for the tested cases, not real reminder delivery or changes to a person's Notes.
 
