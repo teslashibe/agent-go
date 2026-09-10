@@ -10,7 +10,55 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
+
+func TestRelayReturnsDelayedToolResultsAndStillBoundsFailures(t *testing.T) {
+	path, closeEndpoint, err := serveEndpoint(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-time.After(75 * time.Millisecond):
+			_, _ = w.Write([]byte(`{"id":1,"result":{"saved":22}}`))
+		case <-r.Context().Done():
+		}
+	}), time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeEndpoint()
+	var output bytes.Buffer
+	if err := relayMCP(context.Background(), path, strings.NewReader("{}\n"), &output, 25*time.Millisecond); err == nil {
+		t.Fatal("short deadline did not reject delayed work")
+	}
+	output.Reset()
+	if err := relayMCP(context.Background(), path, strings.NewReader("{}\n"), &output, time.Second); err != nil || !strings.Contains(output.String(), `"saved":22`) {
+		t.Fatal(output.String(), err)
+	}
+}
+
+// Run separately on the Mini to exercise the real former two-minute boundary.
+// There are no Notes, model, or message effects in this transport fixture.
+func TestLongHarnessCall(t *testing.T) {
+	if os.Getenv("AGENT_LONG_TOOL_TEST") != "1" {
+		t.Skip("opt-in slow transport regression")
+	}
+	path, closeEndpoint, err := ServeEndpoint(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-time.After(125 * time.Second):
+			_, _ = w.Write([]byte(`{"id":1,"result":{"saved":30}}`))
+		case <-r.Context().Done():
+		}
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeEndpoint()
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Second)
+	defer cancel()
+	var output bytes.Buffer
+	if err := RelayMCP(ctx, path, strings.NewReader("{}\n"), &output); err != nil || !strings.Contains(output.String(), `"saved":30`) {
+		t.Fatal(output.String(), err)
+	}
+}
 
 func TestEndpointRoundtripAndCleanup(t *testing.T) {
 	var requests []string

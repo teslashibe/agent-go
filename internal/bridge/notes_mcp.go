@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/teslashibe/agent-go/internal/harness"
 	"github.com/teslashibe/agent-go/internal/reminders"
 	"github.com/teslashibe/agent-go/internal/store"
 	notesmcp "github.com/teslashibe/notes/mcp"
@@ -132,7 +133,7 @@ func (t *notesTurn) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		err := json.Unmarshal(req.Params, &p)
 		var text string
 		if err == nil {
-			callCtx, cancel := context.WithCancel(r.Context())
+			callCtx, cancel := context.WithTimeout(r.Context(), harness.ToolCallTimeout)
 			stop := context.AfterFunc(t.ctx, cancel)
 			text, err = t.call(callCtx, p.Name, p.Arguments)
 			stop()
