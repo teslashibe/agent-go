@@ -49,6 +49,7 @@ func TestLiveSharedNotesPolish(t *testing.T) {
 		Source                         store.Source
 		Helper, Imsg, Evidence, Prefix string
 		ExistingNoteIDs                []string
+		VerifyExistingID, ControlID    string
 	}
 	data, err := os.ReadFile(path)
 	if err != nil || json.Unmarshal(data, &cfg) != nil {
@@ -104,10 +105,31 @@ func TestLiveSharedNotesPolish(t *testing.T) {
 		t.Fatal("configured fixture group was not verified")
 	}
 	client := notes.Client{NativeExecutable: cfg.Helper, Timeout: 30 * time.Second}
-	control, err := client.Create(ctx, cfg.Prefix+" control", "Unchanged disposable control.")
-	record(map[string]any{"phase": "control_created", "note_id": control.ID, "success": err == nil})
-	if err != nil {
-		t.Fatal("control creation failed; inspect retained evidence")
+	var control notes.Note
+	if cfg.VerifyExistingID != "" || cfg.ControlID != "" {
+		if cfg.VerifyExistingID == "" || cfg.ControlID == "" {
+			t.Fatal("readback requires both exact fixture IDs")
+		}
+		control, err = client.Get(ctx, cfg.ControlID)
+		if err != nil || control.Name != cfg.Prefix+" control" || control.Plaintext != "Unchanged disposable control." || control.Shared {
+			t.Fatal("retained control differs")
+		}
+		existing, err := client.Get(ctx, cfg.VerifyExistingID)
+		if err != nil || existing.Name != cfg.Prefix+" checklist" || !existing.Shared {
+			t.Fatal("retained shared fixture identity differs")
+		}
+		items, err := client.Checklist(ctx, cfg.VerifyExistingID)
+		if err != nil {
+			t.Fatal("retained checklist read failed")
+		}
+		assertPolishChecklist(t, items)
+		record(map[string]any{"phase": "retained_checklist_verified", "note_id": existing.ID, "count": len(items), "writes_repeated": false})
+	} else {
+		control, err = client.Create(ctx, cfg.Prefix+" control", "Unchanged disposable control.")
+		record(map[string]any{"phase": "control_created", "note_id": control.ID, "success": err == nil})
+		if err != nil {
+			t.Fatal("control creation failed; inspect retained evidence")
+		}
 	}
 	before, err := client.Get(ctx, control.ID)
 	if err != nil {
@@ -123,6 +145,10 @@ func TestLiveSharedNotesPolish(t *testing.T) {
 	}
 	var createdID string
 	stage := 0
+	if cfg.VerifyExistingID != "" {
+		createdID = cfg.VerifyExistingID
+		stage = 2
+	}
 	runner := &nativeTestRunner{runNative: func(turnCtx context.Context, handler http.Handler) (Result, error) {
 		endpoint, closeEndpoint, err := harness.ServeEndpoint(handler)
 		if err != nil {
@@ -169,14 +195,7 @@ func TestLiveSharedNotesPolish(t *testing.T) {
 			}
 			call("add_note_items", map[string]any{"operation_id": "extend", "note_id": createdID, "items": items})
 			read := call("read_note", map[string]any{"operation_id": "read-extended", "note_id": createdID})
-			if len(read.Checklist) != 30 || !read.Checklist[0].Checked {
-				t.Fatal("extended checklist lost count or checked state")
-			}
-			for i, item := range read.Checklist {
-				if item.Text != fmt.Sprintf("Fixture item %02d", i+1) || item.Checked != (i == 0) {
-					t.Fatal("native checklist contents differ")
-				}
-			}
+			assertPolishChecklist(t, read.Checklist)
 			reply = cfg.Prefix + ": verified 30 checklist items with the first item still checked."
 		case 2:
 			reply = cfg.Prefix + ": here are the opening links for your two existing packing lists. Each invited participant can open the link using their Apple Account. Their contents and sharing permissions were not changed."
@@ -200,7 +219,7 @@ func TestLiveSharedNotesPolish(t *testing.T) {
 	if err := b.EnableFamilyNotes(ctx, client); err != nil {
 		t.Fatal(err)
 	}
-	for i := 0; i < 3; i++ {
+	for i := stage; i < 3; i++ {
 		intake(t, b, noteMessage(b, int64(900+i), cfg.Prefix), "turn")
 		drain(t, b)
 	}
@@ -209,4 +228,26 @@ func TestLiveSharedNotesPolish(t *testing.T) {
 		t.Fatal("unselected control changed")
 	}
 	record(map[string]any{"phase": "complete", "checklist_note_id": createdID, "control_note_id": control.ID, "checklist_counts": []int{22, 30}, "recipient_opening": "not yet verified", "cleanup": "retain fixtures until recipient verification"})
+}
+
+// Notes may automatically move checked items. Match exact unique fixture text
+// and state rather than assuming an unchanged visual row position.
+func assertPolishChecklist(t *testing.T, items []notes.ChecklistItem) {
+	t.Helper()
+	if len(items) != 30 {
+		t.Fatal("extended checklist count differs")
+	}
+	byText := make(map[string]bool, len(items))
+	for _, item := range items {
+		if _, exists := byText[item.Text]; exists {
+			t.Fatal("duplicate native fixture item")
+		}
+		byText[item.Text] = item.Checked
+	}
+	for i := 0; i < 30; i++ {
+		checked, ok := byText[fmt.Sprintf("Fixture item %02d", i+1)]
+		if !ok || checked != (i == 0) {
+			t.Fatal("native checklist text or checked state differs")
+		}
+	}
 }

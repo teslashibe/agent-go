@@ -83,3 +83,10 @@ sends three marked group messages. Its two configured existing note IDs are used
 only to retrieve invitation links. It retains fixture notes until recipient-side
 opening/edit checks and exact-ID cleanup are complete. Do not enable it with
 unreviewed participant, chat, executable, or note IDs.
+
+The native fixture matches checklist entries by exact text and checked state;
+Notes can sort checked entries automatically. After a completed batch with an
+assertion-only failure, `VerifyExistingID` and `ControlID` allow explicit readback
+of the retained disposable fixtures and delivery of the two existing links.
+Both exact fixture titles are checked before this mode proceeds. It performs no
+checklist writes or creation and retains a separate evidence directory.
