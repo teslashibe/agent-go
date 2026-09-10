@@ -61,7 +61,7 @@ func (t *notesTurn) tools() []map[string]any {
 	if t.bridge != nil && t.bridge.notes != nil {
 		for _, tool := range noteTools() {
 			name := tool["name"].(string)
-			if (name == "create_note" && !t.bridge.ownerNotes) || (name == "create_shared_note" && t.bridge.ownerNotes) {
+			if (name == "create_note" && !t.bridge.ownerNotes) || ((name == "create_shared_note" || name == "get_note_link") && t.bridge.ownerNotes) {
 				continue
 			}
 			tools = append(tools, tool)
@@ -188,7 +188,7 @@ func (t *notesTurn) call(ctx context.Context, name string, raw json.RawMessage) 
 	if t.bridge == nil || t.bridge.notes == nil {
 		return "", errors.New("unknown Notes tool")
 	}
-	if (name == "create_note" && !t.bridge.ownerNotes) || (name == "create_shared_note" && t.bridge.ownerNotes) {
+	if (name == "create_note" && !t.bridge.ownerNotes) || ((name == "create_shared_note" || name == "get_note_link") && t.bridge.ownerNotes) {
 		return "", errors.New("Notes creation mode is not enabled for this chat")
 	}
 	args, err := notesmcp.Decode(name, raw)
@@ -286,6 +286,28 @@ func (t *notesTurn) recordNoteProgress(ctx context.Context, id string, index int
 		return result, errors.Join(ErrUncertain, err, progressErr)
 	}
 	return result, err
+}
+
+// A prepared collaboration is not an invitation until its link reaches the chat.
+// Read the already durable creation progress, including partial batches, so a
+// model omission cannot discard it. CompleteAction queues the resulting reply
+// atomically with job completion using the existing outbox/recovery contract.
+func (b *Bridge) withNoteInvitations(ctx context.Context, jobID int64, reply string) (string, error) {
+	if b.notes == nil || !b.config.Source.Group {
+		return reply, nil
+	}
+	results, err := b.store.ToolProgress(ctx, b.config.Source, jobID)
+	if err != nil {
+		return "", err
+	}
+	for _, raw := range results {
+		var out noteOutcome
+		if json.Unmarshal([]byte(raw), &out) != nil || out.Creation != "completed" || out.Sharing != "verified" || out.Link == "" || strings.Contains(reply, out.Link) {
+			continue
+		}
+		reply = strings.TrimSpace(reply + "\n\nOpen shared note: " + out.Title + "\n" + out.Link)
+	}
+	return reply, nil
 }
 
 // HandlerHasGoogle reports whether this authenticated turn exposes scoped Google tools.

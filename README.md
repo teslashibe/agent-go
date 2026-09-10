@@ -8,7 +8,7 @@
 
 Live Mac mini fixtures have verified private/group replies, exact-message standard tapbacks, private Notes creation and editing, group sharing and checklist edits, and confirmed deletion to Recently Deleted. Signed operator deployments preserve the installation's Keychain identity. VPN SSH works; testing from another physical network remains.
 
-Authenticated model fixtures with fake services also cover Notes tool use and reminder clarification, creation, and cancellation. Google reads and document extraction are implemented; this summary does not claim complete live acceptance. See [verified capabilities](docs/verified.md) for the evidence and limits.
+Authenticated model fixtures with fake services also cover Notes tool use and reminder clarification, creation, and cancellation. Google reads and document extraction are implemented; this summary does not claim complete live acceptance. Shared-note invitations and recipient opening are described in the [group Notes quickstart](docs/shared-notes-quickstart.md). See [verified capabilities](docs/verified.md) for the evidence and limits.
 
 ## Run it
 
