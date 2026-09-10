@@ -42,6 +42,7 @@ type fakeMessenger struct {
 	send      func(string) error
 	reactions []string
 	react     func(string, string) (bool, error)
+	verified  bool
 }
 
 func (f *fakeMessenger) Send(_ context.Context, chatID int64, text string) error {
@@ -53,13 +54,14 @@ func (f *fakeMessenger) Send(_ context.Context, chatID int64, text string) error
 	return f.err
 }
 
-func (f *fakeMessenger) React(_ context.Context, chatID int64, guid, reaction string) (bool, error) {
+func (f *fakeMessenger) React(_ context.Context, chatID int64, guid, reaction string) (ReactionResult, error) {
 	f.chatIDs = append(f.chatIDs, chatID)
 	f.reactions = append(f.reactions, reaction+":"+guid)
 	if f.react != nil {
-		return f.react(guid, reaction)
+		ok, err := f.react(guid, reaction)
+		return ReactionResult{Accepted: ok, Verified: f.verified}, err
 	}
-	return true, f.err
+	return ReactionResult{Accepted: true, Verified: f.verified}, f.err
 }
 
 var source = store.Source{Name: "messages-db", Sender: "exact-sender", ChatGUID: "exact-chat", ChatID: 7}

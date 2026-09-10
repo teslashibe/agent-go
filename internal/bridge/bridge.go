@@ -62,9 +62,16 @@ type ReactionChooser interface {
 	ChooseReaction(ctx context.Context, prompt string) (string, error)
 }
 
+// ReactionResult separates acceptance from verification on the sender Mac.
+// Neither field proves that another participant received the reaction.
+type ReactionResult struct {
+	Accepted bool
+	Verified bool
+}
+
 type Messenger interface {
 	Send(ctx context.Context, chatID int64, text string) error
-	React(ctx context.Context, chatID int64, messageGUID, reaction string) (bool, error)
+	React(ctx context.Context, chatID int64, messageGUID, reaction string) (ReactionResult, error)
 }
 
 type noteClient interface {
@@ -300,6 +307,8 @@ func (b *Bridge) ProcessNext(ctx context.Context) (bool, error) {
 				cancel()
 				if choiceErr == nil {
 					reaction = normalizeReaction(choice)
+				} else {
+					slog.Warn("reaction chooser fallback", "job_id", job.ID, "error_class", errorClass(choiceErr), "reaction", reaction)
 				}
 			}
 			persistCtx, done := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
@@ -310,29 +319,24 @@ func (b *Bridge) ProcessNext(ctx context.Context) (bool, error) {
 			}
 		}
 		slog.Info("reaction start", "job_id", job.ID, "kind", "acknowledgement")
-		submitted := false
+		var receipt ReactionResult
 		var reactErr error
 		if reaction != "none" {
 			sendCtx, cancel := reactionContext(ctx)
-			submitted, reactErr = b.messenger.React(sendCtx, b.config.Source.ChatID, job.GUID, reaction)
+			receipt, reactErr = b.messenger.React(sendCtx, b.config.Source.ChatID, job.GUID, reaction)
 			cancel()
 		}
 		persistCtx, done := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer done()
-		outcome := "skipped"
-		if reactErr != nil {
-			outcome = "unknown"
-			// Acknowledgements are cosmetic. Their uncertain outcome must never
-			// pause or prevent the requested work, and they are never retried.
-			slog.Warn("reaction end", "job_id", job.ID, "kind", "acknowledgement", "outcome", "unknown", "error_class", errorClass(reactErr))
-		} else if !submitted {
-			slog.Info("reaction end", "job_id", job.ID, "kind", "acknowledgement", "outcome", "skipped", "reason", "not_submitted")
-		} else {
-			acked = true
-			outcome = "accepted"
-			slog.Info("reaction end", "job_id", job.ID, "kind", "acknowledgement", "outcome", "submitted", "reaction", reaction)
+		outcome, evidence := reactionOutcome(receipt, reactErr)
+		acked = reactErr == nil && receipt.Accepted
+		logged := outcome
+		if evidence != "" {
+			logged = evidence
 		}
-		if err = b.store.FinishAcknowledgement(persistCtx, b.config.Source, job.ID, outcome); err != nil {
+		// Cosmetic effects never pause requested work and are never replayed.
+		slog.Info("reaction end", "job_id", job.ID, "kind", "acknowledgement", "outcome", logged, "reaction", reaction, "error_class", errorClass(reactErr))
+		if err = b.store.FinishAcknowledgementReceipt(persistCtx, b.config.Source, job.ID, outcome, evidence); err != nil {
 			return true, errors.Join(ErrUncertain, err)
 		}
 	} else if job.Ack {
@@ -351,7 +355,7 @@ func (b *Bridge) ProcessNext(ctx context.Context) (bool, error) {
 	if err != nil {
 		return true, errors.Join(ErrUncertain, err, b.store.MarkTurnUnknown(context.WithoutCancel(ctx), b.config.Source, job.ID, err))
 	}
-	prompt = "Application acknowledgement outcome: " + ackOutcome + ". Acceptance is not independent delivery verification.\n\n" + prompt
+	prompt = "Application acknowledgement outcome: " + ackOutcome + ". Sender verification is local Messages evidence; acceptance alone and sender verification do not prove recipient delivery.\n\n" + prompt
 	nativeRunner, hasTools := b.runner.(NotesRunner)
 	approvalRunner, interactive := b.runner.(ApprovalRunner)
 	if (hasTools || interactive) && b.notes != nil {

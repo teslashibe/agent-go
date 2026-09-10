@@ -36,8 +36,8 @@ func (m *approvalMessenger) Send(ctx context.Context, _ int64, text string) erro
 		return ctx.Err()
 	}
 }
-func (*approvalMessenger) React(context.Context, int64, string, string) (bool, error) {
-	return false, nil
+func (*approvalMessenger) React(context.Context, int64, string, string) (ReactionResult, error) {
+	return ReactionResult{}, nil
 }
 
 func TestApproveCommandsAreOrdinaryTurns(t *testing.T) {

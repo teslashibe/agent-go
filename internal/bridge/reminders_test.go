@@ -377,8 +377,8 @@ func (m *concurrentMessenger) Send(_ context.Context, _ int64, text string) erro
 	return m.err
 }
 
-func (m *concurrentMessenger) React(context.Context, int64, string, string) (bool, error) {
-	return true, m.err
+func (m *concurrentMessenger) React(context.Context, int64, string, string) (ReactionResult, error) {
+	return ReactionResult{Accepted: true}, m.err
 }
 func seedDue(t *testing.T, b *Bridge, s *store.Store) {
 	t.Helper()

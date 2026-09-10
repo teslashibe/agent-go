@@ -62,21 +62,27 @@ func (t *notesTurn) react(ctx context.Context, raw json.RawMessage) (string, err
 		if strings.HasPrefix(cached, "tool_error:") {
 			return "", errors.New(strings.TrimPrefix(cached, "tool_error:"))
 		}
-		if strings.HasPrefix(cached, "Tapback request accepted: ") {
+		if strings.HasPrefix(cached, "Tapback request accepted: ") || strings.HasPrefix(cached, "Tapback verified on sender: ") {
 			t.tapped = true
 		}
 		return cached, nil
 	}
 	sendCtx, cancel := reactionContext(ctx)
-	submitted, reactErr := t.bridge.messenger.React(sendCtx, t.bridge.config.Source.ChatID, t.jobGUID, reaction)
+	receipt, reactErr := t.bridge.messenger.React(sendCtx, t.bridge.config.Source.ChatID, t.jobGUID, reaction)
 	cancel()
 	text := "Tapback request accepted: " + reaction + "; delivery is not independently verified."
-	if reactErr != nil {
+	_, evidence := reactionOutcome(receipt, reactErr)
+	if evidence == "not_started" {
+		text = "Tapback not started: the native backend rejected this target before dispatch. No reaction was applied."
+	} else if reactErr != nil {
 		text = "Tapback outcome is unknown; no reaction was confirmed."
-	} else if !submitted {
+	} else if !receipt.Accepted {
 		text = "Tapback skipped: the inbound message is not available to react to."
 	} else {
 		t.tapped = true
+		if receipt.Verified {
+			text = "Tapback verified on sender: " + reaction + "; recipient delivery is not independently verified."
+		}
 	}
 	persist, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
@@ -85,4 +91,23 @@ func (t *notesTurn) react(ctx context.Context, raw json.RawMessage) (string, err
 		return text, t.uncertain
 	}
 	return text, nil
+}
+
+// Only explicit structured pre-dispatch evidence can classify an error as
+// not started. All transport/cancellation/unknown failures retain uncertainty.
+func reactionOutcome(receipt ReactionResult, err error) (outcome, evidence string) {
+	if err != nil {
+		var failure interface{ NotStarted() bool }
+		if errors.As(err, &failure) && failure.NotStarted() {
+			return "skipped", "not_started"
+		}
+		return "unknown", ""
+	}
+	if !receipt.Accepted {
+		return "skipped", ""
+	}
+	if receipt.Verified {
+		return "accepted", "verified_on_sender"
+	}
+	return "accepted", ""
 }

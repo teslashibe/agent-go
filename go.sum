@@ -60,14 +60,10 @@ github.com/teslashibe/codex v0.7.3 h1:4b5zGDtLTk3DZvl7mhyt6edZTa2otPsGXwv86Rx1tZ
 github.com/teslashibe/codex v0.7.3/go.mod h1:FTZ6XFHUlmCDEXH0ANqWnQYHffg8K9WW/EVc9zgEKzc=
 github.com/teslashibe/google-go v0.3.1 h1:hpXl4BCMTASa+N8FyHwqYzY4sfSTU0CnUY25bJTG3R0=
 github.com/teslashibe/google-go v0.3.1/go.mod h1:RVAUP41A7G4nomejLRSjP0KiYB6ZYd9ADpzN8uI+vG8=
-github.com/teslashibe/imessage v0.3.4 h1:WfmngFp9x1hjdHrcYQgkK7m4C0dpqofJMc1WLne7HIA=
-github.com/teslashibe/imessage v0.3.4/go.mod h1:zF25oGMOiGczl0WAC+L/RN2ZgCM+HXHAUg13Y0uD5ME=
+github.com/teslashibe/imessage v0.3.5 h1:hIWXP77+rurIqdYDHkzTUxWEEky4iHmV3mn2SH/wtek=
+github.com/teslashibe/imessage v0.3.5/go.mod h1:zF25oGMOiGczl0WAC+L/RN2ZgCM+HXHAUg13Y0uD5ME=
 github.com/teslashibe/mcptool v0.1.2 h1:0AavGv+vivqM9gFjGbl4U70eXBnb9EIoMCbDclbPCQs=
 github.com/teslashibe/mcptool v0.1.2/go.mod h1:pEC1/efy4fCDr9NqvX1es+bdud7Q7qe2Uz2BR7ppTgA=
-github.com/teslashibe/notes v0.2.16 h1:IV0MPAei1GxLQ9A0tZBFFxXUtlKCQkJ74+mDtigzfKg=
-github.com/teslashibe/notes v0.2.16/go.mod h1:KdekoHJuF/FP8Q8WZkvk2wX5JrZcVZ4pG8EJA/JaOIU=
-github.com/teslashibe/notes v0.2.17 h1:rzKmllM/ETKZsbrO4cEliVH9K/2xP3hpI4R657tvpDM=
-github.com/teslashibe/notes v0.2.17/go.mod h1:KdekoHJuF/FP8Q8WZkvk2wX5JrZcVZ4pG8EJA/JaOIU=
 github.com/teslashibe/notes v0.2.18 h1:akRg5gV9uOFrOfPKMXSFK4DXm3HEpAKP1nbZioVtl+k=
 github.com/teslashibe/notes v0.2.18/go.mod h1:KdekoHJuF/FP8Q8WZkvk2wX5JrZcVZ4pG8EJA/JaOIU=
 github.com/wk8/go-ordered-map/v2 v2.1.8 h1:5h/BUHu93oj4gIdvHHHGsScSTMijfx5PeYkE/fJgbpc=

@@ -260,3 +260,58 @@ func TestAcknowledgementOutcomesSurviveRestart(t *testing.T) {
 		})
 	}
 }
+
+func TestNativeAcknowledgementEvidenceMigrationAndRestart(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.db")
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	src := Source{Name: "fixture", Sender: "owner", ChatGUID: "chat", ChatID: 1}
+	if err = s.Initialize(ctx, src, 0, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.db.Exec(`INSERT INTO jobs(id,source,guid,prompt,created_at,state,ack_state,ack_outcome) VALUES(1,?,'old','original',0,'completed','submitted','accepted'); ALTER TABLE jobs DROP COLUMN ack_evidence`, src.key()); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	s, err = Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := s.AcknowledgementOutcome(ctx, src, 1); err != nil || got != "accepted" {
+		t.Fatal("migration invented verification", got, err)
+	}
+	for i, tc := range []struct{ outcome, evidence string }{{"accepted", "verified_on_sender"}, {"skipped", "not_started"}} {
+		id := int64(i + 2)
+		if _, err = s.db.Exec(`INSERT INTO jobs(id,source,guid,prompt,created_at,state,ack_state,ack_reaction) VALUES(?,?,?,'fixture',0,'running','dispatching','love')`, id, src.key(), tc.evidence); err != nil {
+			t.Fatal(err)
+		}
+		if err = s.FinishAcknowledgementReceipt(ctx, src, id, tc.outcome, tc.evidence); err != nil {
+			t.Fatal(err)
+		}
+		if err = s.CompleteTurn(ctx, src, id, "", nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err = s.FinishAcknowledgementReceipt(ctx, src, 1, "unknown", "verified_on_sender"); err == nil {
+		t.Fatal("contradictory evidence accepted")
+	}
+	s.Close()
+	s, err = Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	for i, want := range []string{"accepted", "verified_on_sender", "not_started"} {
+		id := int64(i + 1)
+		got, err := s.AcknowledgementOutcome(ctx, src, id)
+		if err != nil || got != want {
+			t.Fatal(got, want, err)
+		}
+		if claimed, _, err := s.ClaimToolOperation(ctx, src, id, "replay", `{"Name":"react","Args":{"reaction":"love"}}`); claimed || err == nil {
+			t.Fatal("restart allowed another reaction")
+		}
+	}
+}

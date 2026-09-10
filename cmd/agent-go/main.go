@@ -361,21 +361,22 @@ func (s *sender) Send(ctx context.Context, chatID int64, text string) error {
 	return err
 }
 
-// React submits only the authenticated job's exact chat/message target. A true
-// result is RPC acceptance, not proof of delivery. Never fall back to UI focus.
-func (s *sender) React(ctx context.Context, chatID int64, messageGUID, reaction string) (bool, error) {
+// React sends the authenticated job's exact target and preserves native
+// verification evidence. It never substitutes another UI target or retries.
+func (s *sender) React(ctx context.Context, chatID int64, messageGUID, reaction string) (bridge.ReactionResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, ok := s.chat(chatID); !ok {
-		return false, errIdentity
+		return bridge.ReactionResult{}, errIdentity
 	}
 	if err := ctx.Err(); err != nil {
-		return false, err
+		return bridge.ReactionResult{}, err
 	}
-	if err := s.client.React(ctx, chatID, messageGUID, imessage.Reaction(reaction)); err != nil {
-		return false, fmt.Errorf("imessage tapback failed: %w", err)
+	result, err := s.client.ReactWithResult(ctx, chatID, messageGUID, imessage.Reaction(reaction))
+	if err != nil {
+		return bridge.ReactionResult{}, fmt.Errorf("imessage tapback failed: %w", err)
 	}
-	return true, nil
+	return bridge.ReactionResult{Accepted: result.OK, Verified: result.Verified}, nil
 }
 
 // connect owns one transport and a separately cancellable worker/reminder pair

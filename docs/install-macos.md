@@ -27,7 +27,7 @@ For the local Mac mini setup:
 The Go executable also builds on Linux, and `transport: "ssh"` is supported, but Messages and native Notes still require a Mac. This guide covers the simpler `local` deployment.
 
 For standard tapbacks with SIP enabled, the Mini workflow uses the optional
-[pinned native backend](https://github.com/teslashibe/imessage/blob/v0.3.4/native/README.md)
+[pinned native backend](https://github.com/teslashibe/imessage/blob/v0.3.5/native/README.md)
 from `teslashibe/imessage`. Build and verify it on the Mini, retain the vendor
 installation for rollback, and explicitly point `imsg_path` to the signed new
 executable. It conservatively rejects ambiguous duplicate text and unsupported
@@ -39,7 +39,7 @@ The current direct `teslashibe` dependencies are:
 
 - [`teslashibe/codex`](https://github.com/teslashibe/codex) v0.7.3
 - [`teslashibe/google-go`](https://github.com/teslashibe/google-go) v0.3.1
-- [`teslashibe/imessage`](https://github.com/teslashibe/imessage) v0.3.4
+- [`teslashibe/imessage`](https://github.com/teslashibe/imessage) v0.3.5
 - [`teslashibe/mcptool`](https://github.com/teslashibe/mcptool) v0.1.2
 - [`teslashibe/notes`](https://github.com/teslashibe/notes) v0.2.18
 

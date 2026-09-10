@@ -90,3 +90,17 @@ assertion-only failure, `VerifyExistingID` and `ControlID` allow explicit readba
 of the retained disposable fixtures and delivery of the two existing links.
 Both exact fixture titles are checked before this mode proceeds. It performs no
 checklist writes or creation and retains a separate evidence directory.
+
+## Native tapback evidence
+
+The runtime preserves `verified_on_sender`, `not_started`, acceptance, skips and
+unknown results in durable turn evidence. Sender verification means the native
+helper observed the requested reaction on the exact message in the Mini's
+Messages database; it does not prove delivery to another device. Neither an
+unknown attempt nor a known rejection is retried by a later model tool call.
+Acknowledgement failure does not prevent the requested Notes or chat work.
+Chooser failures emit a bounded fallback category without logging message text.
+
+The current native backend supports uniquely identifiable plain-text messages.
+Audio and other attachments, duplicate text, and ambiguous native UI targets
+remain unsupported. They must not fall back to reacting to the latest bubble.

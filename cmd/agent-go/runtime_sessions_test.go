@@ -208,8 +208,8 @@ func (failingRuntimeRunner) Run(context.Context, string, string) (bridge.Result,
 type runtimeMessenger struct{}
 
 func (runtimeMessenger) Send(context.Context, int64, string) error { return nil }
-func (runtimeMessenger) React(context.Context, int64, string, string) (bool, error) {
-	return false, nil
+func (runtimeMessenger) React(context.Context, int64, string, string) (bridge.ReactionResult, error) {
+	return bridge.ReactionResult{}, nil
 }
 
 func TestRunChatWorkersJoinsReminderSiblingOnFailure(t *testing.T) {
