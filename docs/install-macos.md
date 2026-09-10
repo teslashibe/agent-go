@@ -41,7 +41,7 @@ The current direct `teslashibe` dependencies are:
 - [`teslashibe/google-go`](https://github.com/teslashibe/google-go) v0.3.1
 - [`teslashibe/imessage`](https://github.com/teslashibe/imessage) v0.3.4
 - [`teslashibe/mcptool`](https://github.com/teslashibe/mcptool) v0.1.2
-- [`teslashibe/notes`](https://github.com/teslashibe/notes) v0.2.17
+- [`teslashibe/notes`](https://github.com/teslashibe/notes) v0.2.18
 
 [go.mod](https://github.com/teslashibe/agent-go/blob/main/go.mod) is the source of truth for direct and transitive versions. All
 pinned modules must be publicly resolvable before this repository's clean public

@@ -19,6 +19,25 @@ type linkFixtureNotes struct {
 	participants  []string
 	linkErr       error
 	failItem      bool
+	existing      bool
+}
+
+func (f *linkFixtureNotes) List(context.Context) ([]notes.Note, error) {
+	listed := []notes.Note{{ID: "shopping-id", Name: "Shopping List", Shared: true}}
+	if f.existing || f.creates > 0 {
+		listed = append(listed, notes.Note{ID: "created-id", Name: "New List", Shared: true})
+	}
+	return listed, nil
+}
+
+func (f *linkFixtureNotes) Get(ctx context.Context, id string) (notes.Note, error) {
+	listed, _ := f.List(ctx)
+	for _, n := range listed {
+		if n.ID == id {
+			return n, nil
+		}
+	}
+	return notes.Note{}, notes.ErrNotFound
 }
 
 func (f *linkFixtureNotes) ShareWithLink(_ context.Context, id string, participants []string) (string, error) {
@@ -151,7 +170,7 @@ func TestCreationInvitationsComeOnlyFromThisJobsDurableProgress(t *testing.T) {
 func TestRealCodexExistingSharedLinks(t *testing.T) {
 	runner := newRealSmokeRunner(t)
 	b, _, _, messenger := familyNotesBridge(t)
-	client := &linkFixtureNotes{}
+	client := &linkFixtureNotes{existing: true}
 	b.notes, b.runner = client, runner
 	intake(t, b, noteMessage(b, 503, "Please send me the opening links for both existing notes, Shopping List and New List. Do not create or share anything new."), "turn")
 	drain(t, b)
