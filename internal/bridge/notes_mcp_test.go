@@ -104,6 +104,41 @@ func TestNativeNotesRoundtripAndFinalResponse(t *testing.T) {
 	}
 }
 
+func TestNativeChecklistUpperBoundThroughHTTP(t *testing.T) {
+	b, s, _, _ := familyNotesBridge(t)
+	client := &nativeFixtureNotes{catalog: []notes.Note{{ID: "shopping-id", Name: "Shopping List", Shared: true}}}
+	b.notes = client
+	intake(t, b, noteMessage(b, 880, "Add a bounded large checklist"), "turn")
+	job, _, err := s.ClaimNext(context.Background(), b.config.Source, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	turn := newNotesTurn(context.Background(), b, job)
+	path, closeEndpoint, err := harness.ServeEndpoint(turn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeEndpoint()
+	items := make([]string, 100)
+	for i := range items {
+		items[i] = fmt.Sprintf("Fixture item %03d", i+1)
+	}
+	request, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": map[string]any{"name": "add_note_items", "arguments": map[string]any{"operation_id": "large", "note_id": "shopping-id", "items": items}}})
+	var output bytes.Buffer
+	if err := harness.RelayMCP(context.Background(), path, bytes.NewReader(append(request, '\n')), &output); err != nil {
+		t.Fatal(err)
+	}
+	out := decodeOutcome(t, output.String())
+	if out.IsError || len(out.Items) != 100 || len(client.items) != 100 {
+		t.Fatalf("bounded batch incomplete: outcomes=%d saved=%d", len(out.Items), len(client.items))
+	}
+	for i, item := range client.items {
+		if item.Text != items[i] || item.Checked {
+			t.Fatal("checklist content mismatch")
+		}
+	}
+}
+
 type safeReadFailure struct{ fakeNotes }
 
 func (f *safeReadFailure) Get(context.Context, string) (notes.Note, error) {

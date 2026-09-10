@@ -61,3 +61,32 @@ backups.
 ## Deferred self-upgrades
 
 The owner coding workflow can prepare repository changes and pull requests. A complete owner-requested handoff has passed on the reference Mini: the independent worker waited for the requesting job to finish, installed the exact verified artifact through the guarded installer, and passed the health check with the original signer and configuration. Queueing an upgrade is still only a pending request; inspect its completed result before claiming deployment. See [Mini verification](mini-development.md) for the required evidence and recovery rules.
+
+## Longer Notes operations
+
+A harness tool call has an eight-minute budget inside the ten-minute application
+turn. Its private HTTP relay and response deadlines allow another 15–20 seconds
+for the structured result to return, instead of disconnecting a valid batch after
+two minutes. Per-native-call limits, cancellation, and uncertainty safeguards
+remain active. A deadline is not proof that an in-flight write did not happen.
+
+The operation journal retains per-item outcomes and the original note identity.
+Report completed, failed, uncertain and not-attempted items from that evidence.
+Never recreate a partially created note or replay an uncertain batch. The 100-item
+input bound is not a promise that every native list will finish within one turn.
+
+The slow `TestLongHarnessCall` regression crosses the former two-minute boundary
+with no native/model effects (`AGENT_LONG_TOOL_TEST=1`). The opt-in
+`TestLiveSharedNotesPolish` uses a private configuration and retained fixture store,
+creates a disposable shared checklist and control, verifies 22 then 30 items, and
+sends three marked group messages. Its two configured existing note IDs are used
+only to retrieve invitation links. It retains fixture notes until recipient-side
+opening/edit checks and exact-ID cleanup are complete. Do not enable it with
+unreviewed participant, chat, executable, or note IDs.
+
+The native fixture matches checklist entries by exact text and checked state;
+Notes can sort checked entries automatically. After a completed batch with an
+assertion-only failure, `VerifyExistingID` and `ControlID` allow explicit readback
+of the retained disposable fixtures and delivery of the two existing links.
+Both exact fixture titles are checked before this mode proceeds. It performs no
+checklist writes or creation and retains a separate evidence directory.
