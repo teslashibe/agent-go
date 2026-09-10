@@ -454,3 +454,31 @@ func TestDueUncertainDoesNotResend(t *testing.T) {
 		t.Fatalf("%+v %v sends=%v", status, err, messenger.sent)
 	}
 }
+
+func TestGroupRecipientDueDelivery(t *testing.T) {
+	b, s, _, m := profileBridge(t)
+	ctx := context.Background()
+	past := time.Now().Add(-2 * time.Hour)
+	if _, err := b.Receive(ctx, profileMessage(1, "peer-fixture", "Remind Sam here")); err != nil {
+		t.Fatal(err)
+	}
+	job, _, err := s.ClaimNext(ctx, b.config.Source, time.Now())
+	if err != nil || job == nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ReminderTool(ctx, b.config.Source, job.ID, "create_reminder", reminders.Args{OperationID: "create", RecipientID: "sam", Text: "green folder", LocalTime: past.Add(time.Hour).UTC().Format(store.WallTimeLayout), Timezone: "UTC"}, past); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CompleteTurn(ctx, b.config.Source, job.ID, "", nil); err != nil {
+		t.Fatal(err)
+	}
+	if worked, err := b.ProcessReminder(ctx); err != nil || !worked {
+		t.Fatal(worked, err)
+	}
+	if len(m.texts) != 1 || !strings.HasPrefix(m.texts[0], "sam: reminder #") || !strings.Contains(m.texts[0], "requested by alex") || !strings.Contains(m.texts[0], "green folder") {
+		t.Fatal(m.texts)
+	}
+	if worked, err := b.ProcessReminder(ctx); err != nil || worked || len(m.texts) != 1 {
+		t.Fatal("repeated dispatch", worked, err)
+	}
+}

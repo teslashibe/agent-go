@@ -22,7 +22,7 @@ func TestToolSchemasAndStrictArguments(t *testing.T) {
 				t.Fatal("authority field exposed", forbidden)
 			}
 		}
-		values := map[string]string{"operation_id": "op", "text": "task", "local_time": "2026-09-07T09:00:00", "timezone": "UTC", "reminder_id": "1", "question": "When?"}
+		values := map[string]string{"operation_id": "op", "text": "task", "local_time": "2026-09-07T09:00:00", "timezone": "UTC", "reminder_id": "1", "question": "When?", "recipient_id": "sam"}
 		args := map[string]string{}
 		for key := range props {
 			args[key] = values[key]

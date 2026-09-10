@@ -92,6 +92,9 @@ func (b *Bridge) ProcessReminder(ctx context.Context) (bool, error) {
 		late = " (late; originally due at the time shown)"
 	}
 	text := fmt.Sprintf("%s: reminder #%d — due %s (%s)%s: %s", reminder.UserID, reminder.ID, reminder.DueUTC.In(loc).Format("2006-01-02 15:04:05 MST"), reminder.CreatedZone, late, reminder.Text)
+	if reminder.CreatedBy != "" && reminder.CreatedBy != reminder.UserID {
+		text += " (requested by " + reminder.CreatedBy + ")"
+	}
 	sendCtx, cancel := context.WithTimeout(ctx, time.Minute)
 	err = b.messenger.Send(sendCtx, b.config.Source.ChatID, text)
 	if err == nil {

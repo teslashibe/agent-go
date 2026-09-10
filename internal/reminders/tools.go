@@ -16,6 +16,7 @@ type Args struct {
 	LocalTime   string `json:"local_time,omitempty"`
 	Timezone    string `json:"timezone,omitempty"`
 	ReminderID  string `json:"reminder_id,omitempty"`
+	RecipientID string `json:"recipient_id,omitempty"`
 	Question    string `json:"question,omitempty"`
 }
 
@@ -25,12 +26,12 @@ func Tools() []map[string]any {
 		name, description string
 		fields            []string
 	}{
-		{"list_reminders", "List this requester's reminders. Use returned IDs for cancellation; do not infer ownership from a name in the message.", nil},
-		{"create_reminder", "Schedule a reminder for the current requester. Resolve missing or ambiguous details first. Use stored timezone unless explicitly supplied; never infer from host or phone. local_time is YYYY-MM-DDTHH:mm:ss, future and at most 366 days away; DST ambiguity is rejected.", []string{"text", "local_time", "timezone"}},
-		{"cancel_reminder", "Cancel a reminder belonging to this requester using its returned ID. A named person is not authority to cancel their reminder.", []string{"reminder_id"}},
+		{"list_reminders", "List reminders addressed to or created by this requester in this group. Use returned IDs for cancellation.", nil},
+		{"create_reminder", "Schedule in this group for an exact recipient_id from reminder_recipients; omit it for the requester or saved pending recipient. Resolve ambiguous recipients and missing details first. Use the requester's stored timezone unless explicitly supplied; never infer from host or phone. local_time is YYYY-MM-DDTHH:mm:ss, future and at most 366 days away; DST ambiguity is rejected.", []string{"text", "local_time", "timezone", "recipient_id"}},
+		{"cancel_reminder", "Cancel a pending reminder addressed to or created by this requester in this group, using its returned ID.", []string{"reminder_id"}},
 		{"get_timezone", "Read this requester's stored timezone before resolving a local reminder time when it is not already in current context.", nil},
 		{"set_timezone", "Set this requester's IANA timezone when they explicitly provide or confirm it. Existing reminders retain their scheduled times.", []string{"timezone"}},
-		{"set_pending_reminder", "Save this requester's reminder request when clarification is needed. Present the question to the user; do not schedule until details are resolved. Existing unexpired original request is retained.", []string{"question"}},
+		{"set_pending_reminder", "Save this requester's reminder request when clarification is needed. Present the question to the user; do not schedule until details are resolved. Use an exact recipient_id from reminder_recipients when resolved. The original request, selected recipient and expiry survive follow-ups; clear pending first to change a resolved recipient.", []string{"question", "recipient_id"}},
 		{"clear_pending_reminder", "Clear this requester's pending reminder clarification when they abandon it or no longer want it. This does not cancel scheduled reminders.", nil},
 	} {
 		props := map[string]any{"operation_id": map[string]any{"type": "string", "minLength": 1, "maxLength": 128}}
@@ -42,13 +43,16 @@ func Tools() []map[string]any {
 				property["minLength"], property["maxLength"] = 1, 500
 			case "local_time":
 				property["pattern"] = `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$`
+			case "recipient_id":
+				property["description"] = "Exact active profile ID from this group's authenticated reminder_recipients"
+				property["pattern"] = `^[a-z][a-z0-9_-]{0,31}$`
 			case "reminder_id":
 				property["pattern"] = `^[1-9][0-9]*$`
 			case "timezone":
 				property["description"] = "IANA timezone, or UTC"
 			}
 			props[field] = property
-			if field != "timezone" || spec.name != "create_reminder" {
+			if field != "recipient_id" && (field != "timezone" || spec.name != "create_reminder") {
 				required = append(required, field)
 			}
 		}
@@ -125,6 +129,9 @@ func Validate(name string, args Args) error {
 	}
 	if strings.TrimSpace(args.OperationID) == "" || len(args.OperationID) > 128 || strings.ContainsAny(args.OperationID, "\x00\r\n") {
 		return errors.New("invalid operation ID")
+	}
+	if args.RecipientID != "" && name != "create_reminder" && name != "set_pending_reminder" {
+		return errors.New("recipient is not supported by this tool")
 	}
 	if name == "cancel_reminder" {
 		if err := ValidateReminderID(args.ReminderID); err != nil {

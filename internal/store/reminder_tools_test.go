@@ -86,7 +86,7 @@ func TestReminderToolStructuredOutcomes(t *testing.T) {
 func (s *Store) completeReminderTest(ctx context.Context, source Source, jobID int64, session string, a Action, now time.Time, split func(string) []string) error {
 	reply := a.Reply
 	if a.Action != "none" && a.Action != "" {
-		result, err := s.ReminderTool(ctx, source, jobID, a.Action, reminders.Args{OperationID: "reminder", Text: a.Text, LocalTime: a.LocalTime, Timezone: a.Timezone, ReminderID: a.ReminderID}, now)
+		result, err := s.ReminderTool(ctx, source, jobID, a.Action, reminders.Args{OperationID: "reminder", Text: a.Text, LocalTime: a.LocalTime, Timezone: a.Timezone, ReminderID: a.ReminderID, RecipientID: a.RecipientID}, now)
 		if err != nil {
 			reply = "No change was made: " + err.Error()
 		} else {
