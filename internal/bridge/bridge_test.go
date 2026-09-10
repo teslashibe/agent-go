@@ -395,7 +395,7 @@ func TestGroupAuthorizationAndSenderAttribution(t *testing.T) {
 		intake(t, b, makeMessage(sender, "/status"), "status")
 		intake(t, b, makeMessage(sender, "/new"), "new")
 	}
-	prefix := "Application acknowledgement outcome: skipped. Acceptance is not independent delivery verification.\n\n"
+	prefix := "Application acknowledgement outcome: skipped. Sender verification is local Messages evidence; acceptance alone and sender verification do not prove recipient delivery.\n\n"
 	want := []string{prefix + "Sender: first@example.com\n\nplain text without prefix", prefix + "Sender: second@example.com\n\nplain text without prefix"}
 	if !reflect.DeepEqual(runner.prompts, want) {
 		t.Fatalf("prompts = %q", runner.prompts)
