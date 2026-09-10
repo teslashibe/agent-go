@@ -13,6 +13,7 @@ This is the evidence summary for the reference Mac mini as of **9 September 2026
 | --- | --- |
 | Private messaging | Authorized DM intake, model reply, and independently observed receipt in the intended conversation. |
 | Group messaging | Shared conversation with authenticated senders; replies independently received in the exact group. |
+| Group reminders for another participant | An authorized group request scheduled a disposable reminder for another configured member. The due message named both recipient and requester and was independently received in the originating group on the other Mac. Existing reminder records remained unchanged during the signed upgrade. |
 | Standard tapbacks | Exact-message reactions independently observed in private and group chats using the optional patched native backend with SIP enabled. |
 | Tapback receipts | The deployed runtime preserves native sender verification in durable acknowledgement evidence. A fresh group request recorded `verified_on_sender`, and the recipient Mac displayed its exact reaction. |
 | Batch deletion | A native fixture created three disposable private notes, reviewed and deleted exactly two, verified the third remained active, then cleaned it up through a separate confirmation. This fixture used real Apple Notes with a temporary test chat/store. |
@@ -42,6 +43,8 @@ These are observations from recorded checks, not a live service-status dashboard
 ## Verified with model fixtures and fake services
 
 Authenticated Codex fixtures passed Notes discovery/read, multiple additions to the selected note, and clarification before ambiguous writes. Reminder fixtures passed natural-language intent, saved clarification across turns, requester/time binding, creation receipts, cancellation, and combined Notes reading plus reminder creation.
+
+Group-recipient fixtures also passed scheduling for another active participant, preserving that recipient through a missing-time follow-up, and cancellation by the original requester. The stored requester and recipient remain separate; delivery stays in the originating group.
 
 Batch-deletion model fixtures also verified full-list approval, refusal, and partial approval: only explicit approval of the complete reviewed set caused deletion.
 
