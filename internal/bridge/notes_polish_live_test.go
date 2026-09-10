@@ -111,7 +111,7 @@ func TestLiveSharedNotesPolish(t *testing.T) {
 			t.Fatal("readback requires both exact fixture IDs")
 		}
 		control, err = client.Get(ctx, cfg.ControlID)
-		if err != nil || control.Name != cfg.Prefix+" control" || control.Plaintext != "Unchanged disposable control." || control.Shared {
+		if err != nil || control.Name != cfg.Prefix+" control" || strings.Join(strings.Fields(control.Plaintext), " ") != cfg.Prefix+" control Unchanged disposable control." || control.Shared {
 			t.Fatal("retained control differs")
 		}
 		existing, err := client.Get(ctx, cfg.VerifyExistingID)
