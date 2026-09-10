@@ -14,6 +14,7 @@ This is the evidence summary for the reference Mac mini as of **9 September 2026
 | Private messaging | Authorized DM intake, model reply, and independently observed receipt in the intended conversation. |
 | Group messaging | Shared conversation with authenticated senders; replies independently received in the exact group. |
 | Standard tapbacks | Exact-message reactions independently observed in private and group chats using the optional patched native backend with SIP enabled. |
+| Tapback receipts | The deployed runtime preserves native sender verification in durable acknowledgement evidence. A fresh group request recorded `verified_on_sender`, and the recipient Mac displayed its exact reaction. |
 | Batch deletion | A native fixture created three disposable private notes, reviewed and deleted exactly two, verified the third remained active, then cleaned it up through a separate confirmation. This fixture used real Apple Notes with a temporary test chat/store. |
 | Private Notes | Create, read, multiline text edits, add real checklist items, change checked state, and confirmed recoverable deletion. |
 | Group Notes | Create a fresh shared note, verify configured participants and a sharing link, read content, add/check/rename checklist items, and confirm recoverable deletion. |
@@ -52,7 +53,7 @@ The deterministic Mini pipeline separately covers formatting, normal and race te
 
 | Capability | Remaining evidence |
 | --- | --- |
-| Tapback receipt persistence | The imessage result API is released. Application receipt persistence has passed signed unit/race tests but remains in a draft PR pending final Mini checks and deployment; audio targets remain unsupported. |
+| Attachment tapbacks | Audio and other attachment targets remain unsupported. Receipt persistence is deployed; it does not remove the native exact-target restrictions. |
 | Invitation opening | The disposable shared checklist was read and edited on one recipient Mac. The other participant’s device and the fresh production invitation’s browser-to-Notes handoff have not been verified. |
 | Google integration | Per-chat account grants and read-only tools are implemented. This summary does not claim a complete live OAuth and provider acceptance run. |
 | Document attachments | Bounded extraction and authorization checks are implemented. This summary does not claim live acceptance across every supported document format. |
