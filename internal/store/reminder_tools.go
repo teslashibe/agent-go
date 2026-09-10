@@ -24,16 +24,17 @@ type ReminderToolResult struct {
 }
 
 type PendingInfo struct {
-	Text      string    `json:"text"`
-	Question  string    `json:"question"`
-	CreatedAt time.Time `json:"created_at"`
-	ExpiresAt time.Time `json:"expires_at"`
+	Text        string    `json:"text"`
+	RecipientID string    `json:"recipient_id,omitempty"`
+	Question    string    `json:"question"`
+	CreatedAt   time.Time `json:"created_at"`
+	ExpiresAt   time.Time `json:"expires_at"`
 }
 
 func reminderPendingInfo(ctx context.Context, tx *sql.Tx, source Source, sender string) (*PendingInfo, error) {
 	p := &PendingInfo{}
 	var created int64
-	err := tx.QueryRowContext(ctx, `SELECT prompt,question,created_at FROM reminder_clarifications WHERE source=? AND sender=?`, source.key(), sender).Scan(&p.Text, &p.Question, &created)
+	err := tx.QueryRowContext(ctx, `SELECT prompt,question,created_at,recipient_id FROM reminder_clarifications WHERE source=? AND sender=?`, source.key(), sender).Scan(&p.Text, &p.Question, &created, &p.RecipientID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -93,6 +94,24 @@ func (s *Store) ReminderTool(ctx context.Context, source Source, jobID int64, na
 	if unresolved {
 		return "", ErrUncertain
 	}
+	recipient := args.RecipientID
+	if name == "create_reminder" || name == "set_pending_reminder" {
+		pending, err := reminderPendingInfo(ctx, tx, source, sender)
+		if err != nil {
+			return "", err
+		}
+		if pending != nil && now.Before(pending.ExpiresAt) && pending.RecipientID != "" {
+			if recipient != "" && recipient != pending.RecipientID {
+				return "", errors.New("clear the pending reminder before changing its recipient")
+			}
+			recipient = pending.RecipientID
+		}
+		if recipient != "" {
+			if err := validateReminderRecipient(ctx, tx, source, recipient); err != nil {
+				return "", err
+			}
+		}
+	}
 	outcome := ReminderToolResult{Status: "completed", Timezone: zone, TimezoneConfigured: zone != ""}
 	switch name {
 	case "get_timezone":
@@ -103,7 +122,7 @@ func (s *Store) ReminderTool(ctx context.Context, source Source, jobID int64, na
 			return "", readErr
 		}
 		// Keep the original request and expiry on clarification follow-ups.
-		_, err = tx.ExecContext(ctx, `INSERT INTO reminder_clarifications(source,sender,prompt,created_at,question) VALUES(?,?,?,?,?) ON CONFLICT(source,sender) DO UPDATE SET prompt=CASE WHEN created_at<=? THEN excluded.prompt ELSE prompt END, created_at=CASE WHEN created_at<=? THEN excluded.created_at ELSE created_at END, question=excluded.question`, source.key(), sender, boundedText(prompt, 4000), now.UnixNano(), args.Question, now.Add(-24*time.Hour).UnixNano(), now.Add(-24*time.Hour).UnixNano())
+		_, err = tx.ExecContext(ctx, `INSERT INTO reminder_clarifications(source,sender,prompt,created_at,question,recipient_id) VALUES(?,?,?,?,?,?) ON CONFLICT(source,sender) DO UPDATE SET prompt=CASE WHEN created_at<=? THEN excluded.prompt ELSE prompt END, created_at=CASE WHEN created_at<=? THEN excluded.created_at ELSE created_at END, question=excluded.question,recipient_id=excluded.recipient_id`, source.key(), sender, boundedText(prompt, 4000), now.UnixNano(), args.Question, recipient, now.Add(-24*time.Hour).UnixNano(), now.Add(-24*time.Hour).UnixNano())
 		if err == nil {
 			outcome.Pending, err = reminderPendingInfo(ctx, tx, source, sender)
 		}
@@ -122,7 +141,7 @@ func (s *Store) ReminderTool(ctx context.Context, source Source, jobID int64, na
 			outcome.Message = "No pending reminder clarification existed. Scheduled reminders are unchanged."
 		}
 	default:
-		outcome, err = executeAction(ctx, tx, source, id, zone, Action{Action: name, Text: args.Text, LocalTime: args.LocalTime, Timezone: args.Timezone, ReminderID: args.ReminderID}, now)
+		outcome, err = executeAction(ctx, tx, source, id, zone, Action{Action: name, Text: args.Text, LocalTime: args.LocalTime, Timezone: args.Timezone, ReminderID: args.ReminderID, RecipientID: recipient}, now)
 		if err == nil && name == "create_reminder" && !outcome.IsError {
 			_, err = tx.ExecContext(ctx, `DELETE FROM reminder_clarifications WHERE source=? AND sender=?`, source.key(), sender)
 		}

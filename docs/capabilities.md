@@ -4,7 +4,7 @@
 
 Add another entry to `agents` with `group: true`, the exact group chat ID/GUID, and its allowed senders. Keep it on the scratch workspace. Configure per-agent `profiles` for reminder users with `id`, `sender`, and `time_zone`; sender identities must match the allowlist, and timezone values are IANA names such as `UTC`. Set them explicitly: an omitted profile timezone defaults to `America/Los_Angeles`, not the sender's location.
 
-Reminders belong to the authenticated requester, not a person named in message text. They are one-shot reminders managed by this application's SQLite state, **not Apple Reminders integration**. Changing a saved timezone does not reschedule existing reminders.
+An authorized group participant can schedule a reminder for themselves or another active profile in the same group. The agent resolves the recipient from configured profile IDs, records who requested it, and delivers it in the original group. It asks about missing times or ambiguous recipients; a follow-up from another speaker cannot consume someone else’s pending request. The requester’s stored timezone applies unless another timezone is explicitly resolved. A reminder’s creator and recipient can list or cancel it while pending; other members cannot manage it or change someone else’s timezone. They are one-shot reminders managed by this application's SQLite state, **not Apple Reminders integration**. Changing a saved timezone does not reschedule existing reminders.
 
 ## Coding DM
 

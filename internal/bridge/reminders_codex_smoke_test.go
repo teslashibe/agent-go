@@ -117,4 +117,30 @@ func TestRealCodexReminderContinuation(t *testing.T) {
 		t.Fatal("combined request missing committed creation receipt")
 	}
 
+	// A named group recipient remains bound through a clarification turn.
+	turn(5, "Remind Sam to pack the green folder.")
+	var recipient string
+	if err = db.QueryRow(`SELECT recipient_id FROM reminder_clarifications WHERE sender='owner'`).Scan(&recipient); err != nil || recipient != "sam" {
+		t.Fatal("missing selected group recipient", recipient, err)
+	}
+	if count(`SELECT count(*) FROM reminders`) != 2 {
+		t.Fatal("scheduled without a time")
+	}
+	peerDue := target.Add(2 * time.Hour)
+	turn(6, peerDue.Format("2006-01-02 at 15:04:05 UTC")+", here in this group.")
+	var creator string
+	if err = db.QueryRow(`SELECT id,user_id,created_by,text,due_utc,status FROM reminders ORDER BY id DESC LIMIT 1`).Scan(&id, &owner, &creator, &text, &due, &status); err != nil {
+		t.Fatal(err)
+	}
+	if count(`SELECT count(*) FROM reminders`) != 3 || owner != "sam" || creator != "alex" || due != peerDue.Unix() || status != "pending" || !strings.Contains(strings.ToLower(text), "green folder") {
+		t.Fatal("wrong cross-participant reminder", owner, creator, due, status, text)
+	}
+	if count(`SELECT count(*) FROM reminder_clarifications`) != 0 {
+		t.Fatal("pending request not consumed")
+	}
+	turn(7, fmt.Sprintf("Cancel the reminder #%d I just requested for Sam.", id))
+	if err = db.QueryRow(`SELECT status FROM reminders WHERE id=?`, id).Scan(&status); err != nil || status != "cancelled" {
+		t.Fatal("creator could not cancel", status, err)
+	}
+
 }
