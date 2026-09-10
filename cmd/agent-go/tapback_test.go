@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/teslashibe/agent-go/internal/bridge"
 	"github.com/teslashibe/agent-go/internal/config"
 	"github.com/teslashibe/imessage"
 )
@@ -27,7 +28,7 @@ func TestSenderExactTapback(t *testing.T) {
 					done := make(chan error, 1)
 					go func() {
 						accepted, err := s.React(context.Background(), 42, "older-authenticated-job-guid", reaction)
-						if err == nil && !accepted {
+						if err == nil && !accepted.Accepted {
 							err = errors.New("acceptance lost")
 						}
 						done <- err
@@ -69,7 +70,7 @@ func TestSenderTapbackFailureHasNoFallback(t *testing.T) {
 		done := make(chan error, 1)
 		go func() {
 			accepted, err := s.React(context.Background(), 42, "guid", "like")
-			if accepted || err == nil {
+			if accepted.Accepted || err == nil {
 				done <- errors.New("failure reported as success")
 				return
 			}
@@ -103,12 +104,43 @@ func TestSenderTapbackFailureHasNoFallback(t *testing.T) {
 
 func TestSenderTapbackRejectsBeforeTransport(t *testing.T) {
 	s := &sender{cfg: config.Config{ChatID: 42}}
-	if accepted, err := s.React(context.Background(), 99, "guid", "like"); accepted || !errors.Is(err, errIdentity) {
+	if accepted, err := s.React(context.Background(), 99, "guid", "like"); accepted.Accepted || !errors.Is(err, errIdentity) {
 		t.Fatal(accepted, err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if accepted, err := s.React(ctx, 42, "guid", "like"); accepted || !errors.Is(err, context.Canceled) {
+	if accepted, err := s.React(ctx, 42, "guid", "like"); accepted.Accepted || !errors.Is(err, context.Canceled) {
 		t.Fatal(accepted, err)
+	}
+}
+
+func TestSenderPreservesNativeVerification(t *testing.T) {
+	clientSide, peer := net.Pipe()
+	client := imessage.NewClient(clientSide, clientSide)
+	defer client.Close()
+	defer peer.Close()
+	peer.SetDeadline(time.Now().Add(5 * time.Second))
+	s := &sender{client: client, cfg: config.Config{ChatID: 42}}
+	done := make(chan bridge.ReactionResult, 1)
+	go func() {
+		result, err := s.React(context.Background(), 42, "exact-guid", "love")
+		if err != nil {
+			done <- bridge.ReactionResult{}
+			return
+		}
+		done <- result
+	}()
+	var req struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(peer).Decode(&req); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.NewEncoder(peer).Encode(map[string]any{"jsonrpc": "2.0", "id": req.ID, "result": map[string]any{"ok": true, "reaction": "love", "verified": true}}); err != nil {
+		t.Fatal(err)
+	}
+	got := <-done
+	if !got.Accepted || !got.Verified {
+		t.Fatal("native evidence lost", got)
 	}
 }

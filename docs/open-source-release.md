@@ -11,7 +11,7 @@ separate private repository. Do not import that history into this repository.
 | --- | --- | --- |
 | github.com/teslashibe/codex | v0.7.3 | Public |
 | github.com/teslashibe/notes | v0.2.18 | Public |
-| github.com/teslashibe/imessage | v0.3.4 | Public |
+| github.com/teslashibe/imessage | v0.3.5 | Public |
 | github.com/teslashibe/google-go | v0.3.1 | Public |
 | github.com/teslashibe/mcptool | v0.1.2 | Public |
 

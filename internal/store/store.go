@@ -173,6 +173,14 @@ func (s *Store) migrateAcknowledgements() error {
 			return err
 		}
 	}
+	if err := s.db.QueryRow(`SELECT count(*) FROM pragma_table_info('jobs') WHERE name='ack_evidence'`).Scan(&count); err != nil {
+		return err
+	}
+	if count == 0 {
+		if _, err := s.db.Exec(`ALTER TABLE jobs ADD COLUMN ack_evidence TEXT NOT NULL DEFAULT '' CHECK(ack_evidence IN ('','verified_on_sender','not_started'))`); err != nil {
+			return err
+		}
+	}
 	_, err := s.db.Exec(`BEGIN IMMEDIATE;
 UPDATE jobs SET ack_outcome='unknown' WHERE ack_state='dispatching' AND ack_outcome='';
 UPDATE jobs SET ack_state='unknown' WHERE ack_state='dispatching';
@@ -574,19 +582,28 @@ func (s *Store) SaveAcknowledgementChoice(ctx context.Context, source Source, jo
 // ack_state remains the legacy scheduling/recovery marker. ack_outcome records
 // observed outcomes separately, without relabeling historical submitted rows.
 func (s *Store) FinishAcknowledgement(ctx context.Context, source Source, jobID int64, outcome string) error {
+	return s.FinishAcknowledgementReceipt(ctx, source, jobID, outcome, "")
+}
+
+// FinishAcknowledgementReceipt persists bounded native evidence atomically with
+// the existing scheduling marker. Historical outcomes are never relabeled.
+func (s *Store) FinishAcknowledgementReceipt(ctx context.Context, source Source, jobID int64, outcome, evidence string) error {
 	if outcome != "accepted" && outcome != "skipped" && outcome != "unknown" {
 		return errors.New("invalid acknowledgement outcome")
+	}
+	if evidence != "" && !(evidence == "verified_on_sender" && outcome == "accepted") && !(evidence == "not_started" && outcome == "skipped") {
+		return errors.New("inconsistent acknowledgement evidence")
 	}
 	state := "submitted"
 	if outcome == "unknown" {
 		state = "unknown"
 	}
-	return changed(s.db.ExecContext(ctx, `UPDATE jobs SET ack_state=?,ack_outcome=? WHERE id=? AND source=? AND state='running' AND ack_state='dispatching'`, state, outcome, jobID, source.key()))
+	return changed(s.db.ExecContext(ctx, `UPDATE jobs SET ack_state=?,ack_outcome=?,ack_evidence=? WHERE id=? AND source=? AND state='running' AND ack_state='dispatching'`, state, outcome, evidence, jobID, source.key()))
 }
 
 func (s *Store) AcknowledgementOutcome(ctx context.Context, source Source, jobID int64) (string, error) {
 	var outcome string
-	err := s.db.QueryRowContext(ctx, `SELECT CASE WHEN ack_outcome='' THEN 'unrecorded' ELSE ack_outcome END FROM jobs WHERE id=? AND source=?`, jobID, source.key()).Scan(&outcome)
+	err := s.db.QueryRowContext(ctx, `SELECT CASE WHEN ack_evidence!='' THEN ack_evidence WHEN ack_outcome='' THEN 'unrecorded' ELSE ack_outcome END FROM jobs WHERE id=? AND source=?`, jobID, source.key()).Scan(&outcome)
 	return outcome, err
 }
 

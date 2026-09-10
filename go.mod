@@ -5,7 +5,7 @@ go 1.25.13
 require (
 	github.com/teslashibe/codex v0.7.3
 	github.com/teslashibe/google-go v0.3.1
-	github.com/teslashibe/imessage v0.3.4
+	github.com/teslashibe/imessage v0.3.5
 	github.com/teslashibe/mcptool v0.1.2
 	golang.org/x/oauth2 v0.36.0
 	modernc.org/sqlite v1.40.1

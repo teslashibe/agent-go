@@ -32,8 +32,8 @@ func (m polishLiveMessenger) Send(ctx context.Context, chatID int64, text string
 	_, err := m.client.Send(ctx, chatID, text)
 	return err
 }
-func (m polishLiveMessenger) React(context.Context, int64, string, string) (bool, error) {
-	return false, errors.New("native fixture has no real inbound message to react to")
+func (m polishLiveMessenger) React(context.Context, int64, string, string) (ReactionResult, error) {
+	return ReactionResult{}, errors.New("native fixture has no real inbound message to react to")
 }
 
 // Explicit opt-in: real Notes and three messages to the configured group. The
