@@ -80,7 +80,7 @@ func (b *Bridge) refreshSharedNotes(ctx context.Context) error {
 	return b.store.SyncAuthorizedNotes(ctx, b.config.Source, accessibleNotes(listed, b.ownerNotes))
 }
 func isNoteAction(action string) bool {
-	return slices.Contains([]string{"list_notes", "read_note", "add_note_item", "edit_note_item", "edit_note_text", "check_note_item", "uncheck_note_item", "delete_note", "confirm_delete_note", "create_shared_note", "create_note"}, action)
+	return slices.Contains([]string{"list_notes", "read_note", "get_note_link", "add_note_item", "edit_note_item", "edit_note_text", "check_note_item", "uncheck_note_item", "delete_note", "confirm_delete_note", "create_shared_note", "create_note"}, action)
 }
 
 type noteOutcome notesmcp.Outcome
@@ -183,6 +183,18 @@ func (b *Bridge) executeNoteAction(ctx context.Context, jobID int64, action stor
 		out = noteOutcome(notesmcp.Read(ctx, b.notes, notesmcp.Outcome(out)))
 		return
 	}
+	if action.Action == "get_note_link" {
+		if b.ownerNotes || !b.config.Source.Group {
+			out.fail("Shared-note links require configured group participants", nil)
+			return
+		}
+		out.Link, err = b.notes.SharedLink(ctx, noteID, slices.Clone(b.config.Source.AllowedSenders))
+		if err != nil {
+			out.fail("Could not retrieve a verified invitation link; no sharing permissions were changed", err)
+			err = nil
+		}
+		return
+	}
 	start := func() error {
 		if operationID != "" {
 			return b.store.StartNativeNoteAction(ctx, b.config.Source, jobID, operationID, action.Action, noteID)
@@ -262,7 +274,7 @@ func (b *Bridge) executeNoteAction(ctx context.Context, jobID int64, action stor
 				e = errors.Join(ErrUncertain, e)
 			} else if !b.ownerNotes {
 				out.Sharing = "unverified"
-				e = b.notes.Share(ctx, n.ID, slices.Clone(b.config.Source.AllowedSenders))
+				out.Link, e = b.notes.ShareWithLink(ctx, n.ID, slices.Clone(b.config.Source.AllowedSenders))
 				if e == nil {
 					persist, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 					e = b.store.SetNoteShared(persist, b.config.Source, n.ID)

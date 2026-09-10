@@ -9,6 +9,60 @@ import (
 	"testing"
 )
 
+func TestToolProgressSurvivesRestartWithoutCrossSourceDisclosure(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "progress.db")
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := Source{Name: "test", Sender: "sender", ChatGUID: "chat", ChatID: 1}
+	if err := s.Initialize(ctx, source, 0, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec(`INSERT INTO jobs(id,source,guid,prompt,created_at,state) VALUES(1,?,'fixture','test',0,'running')`, source.key()); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.ClaimToolOperation(ctx, source, 1, "create", `{}`); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RecordToolProgress(ctx, source, 1, "create", 0, "durable invitation"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CompleteToolOperation(ctx, source, 1, "create", "completed"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CompleteTurn(ctx, source, 1, "", []string{"invitation reply"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s, err = Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	for i := 0; i < 2; i++ {
+		progress, err := s.ToolProgress(ctx, source, 1)
+		if err != nil || len(progress) != 1 || progress[0] != "durable invitation" {
+			t.Fatal(progress, err)
+		}
+	}
+	other := source
+	other.ChatID++
+	if progress, err := s.ToolProgress(ctx, other, 1); err != nil || len(progress) != 0 {
+		t.Fatal("cross-source progress", progress, err)
+	}
+	if progress, err := s.ToolProgress(ctx, source, 2); err != nil || len(progress) != 0 {
+		t.Fatal("cross-job progress", progress, err)
+	}
+	var pending int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM replies WHERE job_id=1 AND state='pending'`).Scan(&pending); err != nil || pending != 1 {
+		t.Fatal("read changed reply state", pending, err)
+	}
+}
+
 func TestToolOperationClaims(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "state.db")

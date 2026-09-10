@@ -20,7 +20,7 @@ This is the evidence summary for the reference Mac mini as of **9 September 2026
 | Reviewed Notes recovery | A fresh request verified membership before using a note from an abandoned sharing attempt. Original evidence was retained; creation and invitations were not replayed. |
 | Owner coding chat | Scope tickets, create issues and PRs, and perform code review in approved repositories. |
 
-Deletion moved the disposable test note to **Recently Deleted**, with independent readback. It was not permanent erasure. Group discovery still requires care: a note being shared does not prove its collaborators match a particular chat. See [Notes access rules](capabilities.md#apple-notes-optional).
+Deletion moved the disposable test note to **Recently Deleted**, with independent readback. It was not permanent erasure. Owner-side sharing verification does not prove an invitation reached or was opened by a recipient. See the [shared-note quickstart](shared-notes-quickstart.md). Group discovery still requires care: a note being shared does not prove its collaborators match a particular chat. See [Notes access rules](capabilities.md#apple-notes-optional).
 
 Tapbacks require English Messages labels and a usable GUI. Attachments, unsupported message parts, duplicate text, and ambiguous UI targets are deliberately excluded. Selecting a message or submitting a UI action does not establish a successful reaction.
 

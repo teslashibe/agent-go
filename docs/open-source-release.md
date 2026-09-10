@@ -10,7 +10,7 @@ separate private repository. Do not import that history into this repository.
 | Module | Required version | Visibility |
 | --- | --- | --- |
 | github.com/teslashibe/codex | v0.7.3 | Public |
-| github.com/teslashibe/notes | v0.2.16 | Public |
+| github.com/teslashibe/notes | v0.2.17 | Public |
 | github.com/teslashibe/imessage | v0.3.4 | Public |
 | github.com/teslashibe/google-go | v0.3.1 | Public |
 | github.com/teslashibe/mcptool | v0.1.2 | Public |

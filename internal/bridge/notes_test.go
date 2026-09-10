@@ -29,7 +29,12 @@ func (f *fakeNotes) Create(_ context.Context, title, body string) (notes.Note, e
 	f.creates++
 	return notes.Note{ID: "created-id", Name: title}, nil
 }
-func (f *fakeNotes) Share(context.Context, string, []string) error              { return nil }
+func (f *fakeNotes) ShareWithLink(context.Context, string, []string) (string, error) {
+	return "https://www.icloud.com/notes/fixture", nil
+}
+func (f *fakeNotes) SharedLink(context.Context, string, []string) (string, error) {
+	return "https://www.icloud.com/notes/fixture", nil
+}
 func (f *fakeNotes) VerifyParticipants(context.Context, string, []string) error { return nil }
 func (f *fakeNotes) AddChecklistItem(_ context.Context, _ string, text string) ([]notes.ChecklistItem, error) {
 	f.adds++

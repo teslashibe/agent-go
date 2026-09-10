@@ -72,7 +72,8 @@ type noteClient interface {
 	Get(context.Context, string) (notes.Note, error)
 	Checklist(context.Context, string) ([]notes.ChecklistItem, error)
 	Create(context.Context, string, string) (notes.Note, error)
-	Share(context.Context, string, []string) error
+	ShareWithLink(context.Context, string, []string) (string, error)
+	SharedLink(context.Context, string, []string) (string, error)
 	VerifyParticipants(context.Context, string, []string) error
 	AddChecklistItem(context.Context, string, string) ([]notes.ChecklistItem, error)
 	EditChecklistItem(context.Context, string, string, string) ([]notes.ChecklistItem, error)
@@ -391,6 +392,10 @@ func (b *Bridge) ProcessNext(ctx context.Context) (bool, error) {
 		action, decodeErr := decodeAction(result.Text)
 		if decodeErr != nil {
 			action = store.Action{Action: "none", Reply: "I couldn't safely interpret the final response. No action was taken from that final response; earlier tool results still apply. Please check those results before retrying."}
+		}
+		action.Reply, err = b.withNoteInvitations(persistCtx, job.ID, action.Reply)
+		if err != nil {
+			return true, errors.Join(ErrUncertain, err, b.store.MarkTurnUnknown(persistCtx, b.config.Source, job.ID, err))
 		}
 		tapped := acked || turn.attachedTapback()
 		if action.Action == "none" && strings.TrimSpace(action.Reply) == "" && tapped {

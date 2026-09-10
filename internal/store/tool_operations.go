@@ -100,6 +100,25 @@ func (s *Store) RecordToolProgress(ctx context.Context, source Source, jobID int
 	return nil
 }
 
+// ToolProgress reads persisted outcomes for this exact source and job, including
+// successful early steps of an incomplete operation. It performs no recovery.
+func (s *Store) ToolProgress(ctx context.Context, source Source, jobID int64) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT p.result FROM tool_progress p JOIN jobs j ON j.id=p.job_id WHERE j.source=? AND j.id=? ORDER BY p.rowid`, source.key(), jobID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var results []string
+	for rows.Next() {
+		var result string
+		if err := rows.Scan(&result); err != nil {
+			return nil, err
+		}
+		results = append(results, result)
+	}
+	return results, rows.Err()
+}
+
 func (s *Store) migrateToolOperations() error {
 	// A separate resolution marker preserves the original uncertainty and avoids
 	// rebuilding the operation/progress foreign-key graph on existing databases.

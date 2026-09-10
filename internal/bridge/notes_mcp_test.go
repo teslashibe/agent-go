@@ -377,7 +377,12 @@ func (c *creationNotes) List(context.Context) ([]notes.Note, error) {
 	}
 	return listed, nil
 }
-func (c *creationNotes) Share(context.Context, string, []string) error { return c.shareErr }
+func (c *creationNotes) ShareWithLink(context.Context, string, []string) (string, error) {
+	if c.shareErr != nil {
+		return "", c.shareErr
+	}
+	return "https://www.icloud.com/notes/fixture", nil
+}
 func (c *creationNotes) AddChecklistItem(_ context.Context, id, text string) ([]notes.ChecklistItem, error) {
 	c.ids = append(c.ids, id)
 	return []notes.ChecklistItem{{Text: text}}, nil

@@ -28,7 +28,10 @@ func (f *ownerFixtureNotes) Create(_ context.Context, title, body string) (notes
 	f.catalog = append(f.catalog, n)
 	return n, nil
 }
-func (f *ownerFixtureNotes) Share(context.Context, string, []string) error { f.shares++; return nil }
+func (f *ownerFixtureNotes) ShareWithLink(context.Context, string, []string) (string, error) {
+	f.shares++
+	return "https://www.icloud.com/notes/fixture", nil
+}
 
 func TestOwnerNotesPrivateCreation(t *testing.T) {
 	for _, uncertain := range []bool{false, true} {
