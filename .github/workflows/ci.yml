@@ -24,8 +24,7 @@ jobs:
       fail-fast: false
       matrix:
         go:
-          - "1.25.13"
-          - "1.26.6"
+          - "1.26.10"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -49,10 +48,10 @@ jobs:
       - name: Race test
         run: go test -race ./...
       - name: Install govulncheck
-        if: matrix.go == '1.26.6'
+        if: matrix.go == '1.26.10'
         run: go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
       - name: Vulnerability scan
-        if: matrix.go == '1.26.6'
+        if: matrix.go == '1.26.10'
         run: govulncheck ./...
 
   python:
