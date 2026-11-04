@@ -1,6 +1,6 @@
 module github.com/teslashibe/agent-go
 
-go 1.26.0
+go 1.26.10
 
 require (
 	github.com/teslashibe/codex v0.7.3
